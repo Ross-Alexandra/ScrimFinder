@@ -50,18 +50,19 @@ def message_bot(queue_object):
 @app.route("/scrim_request", methods=['POST'])
 def scrim_request():
     data = request.get_json()
-    required_parameters = ["team_name", "team_contact", "played_at", "maps"]
+    required_parameters = ["team_name", "scrim_type", "team_contact", "played_at", "maps"]
 
     if data is None or not all([x in data.keys() for x in required_parameters]):
         return "Missing Parameters on request", 400
 
     # Convert the data to usable formats.
     team_name = data["team_name"].lower()
+    scrim_type = data["scrim_type"].lower()
     team_contact = data["team_contact"]
     played_at = datetime.utcfromtimestamp(data["played_at"] / 1000)
     maps = [requested_map.lower() for requested_map in data["maps"]]
 
-    new_scrim = Scrim(team_name, team_contact, played_at, maps)
+    new_scrim = Scrim(team_name, scrim_type, team_contact, played_at, maps)
     scrim_response = message_bot(new_scrim)
 
     if scrim_response is not SystemCodes.Good:

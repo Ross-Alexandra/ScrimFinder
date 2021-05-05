@@ -20,6 +20,7 @@ class App extends Component {
             played_at,
             team_contact: "",
             maps_text: "",
+            scrim_type: "Gameday",
             maps: []
         };
     }
@@ -44,6 +45,12 @@ class App extends Component {
         }
 
         this.setState({team_contact: new_name});
+    }
+
+    onScrimTypeChanged = (update) => {
+        const new_scrim_type = update.target.value;
+
+        this.setState({scrim_type: new_scrim_type});
     }
 
     onMapsChanged = (update) => {
@@ -77,6 +84,7 @@ class App extends Component {
                 },
                 body: JSON.stringify({
                     "team_name": this.state.team_name,
+                    "scrim_type": this.state.scrim_type,
                     "played_at": this.state.played_at,
                     "team_contact": this.state.team_contact,
                     "maps": this.state.maps
@@ -105,6 +113,14 @@ class App extends Component {
                     <label>
                         Enter Team Name:
                         <input type="text" value={this.state.team_name} onChange={this.onTeamNameChanged} name="team_name"/>
+                    </label>
+                    <label>
+                        Enter Scrim Type:
+                        <select onChange={this.onScrimTypeChanged}>
+                            <option value="gameday">Gameday</option>
+                            <option value="6-6">6-6</option>
+                            <option value="no preference">No preference</option>
+                        </select>
                     </label>
                     <label>
                         Enter when this scrim will be played (EST)

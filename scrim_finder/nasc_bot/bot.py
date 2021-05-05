@@ -1,3 +1,5 @@
+import asyncio
+import datetime
 import discord
 from multiprocessing.connection import Listener
 import re
@@ -14,7 +16,6 @@ from scrim_finder.db import ScrimFinderDB
 from scrim_finder.nasc_bot.command import CommandParser
 
 class NASCBot(discord.Client):
-
     # =========== External Utilities =========== #
     def spawn_listener(self):
         self.__thread__ = Thread(target=self._on_queue_receive)
@@ -86,15 +87,49 @@ class NASCBot(discord.Client):
         await cp.run()
 
     # =========== Bot Utilities =========== #
+    def message_channel(self, msg, channel: discord.abc.Messageable, embed=False):
+        #asyncio.set_event_loop(self.loop)
+        print("Sending message to discord.")
+
+        try:
+            if not embed:
+                asyncio.run_coroutine_threadsafe(channel.send(content=msg), self.loop)
+            else:
+                asyncio.run_coroutine_threadsafe(channel.send(embed=msg), self.loop)
+            print("Message should be sent.")
+
+        # An exception is always thrown, but the message is also
+        # always sent....... TODO: Look into this.
+        except Exception:
+            print(f"Error while sending message to discord. This may not be fatal\n")
+            traceback.print_exc()
+
     def _add_scrim(self, scrim):
         db = ScrimFinderDB()
 
         map_ids = [db.select_map_id_from_name(map_name) for map_name in scrim.map_names]
-        matching_scrim_ids = db.select_matching_scrims(scrim.played_at, map_ids)
+        scrim_type_id = db.select_scrim_type_id_by_name(scrim.scrim_type)
+        matching_scrim_ids = db.select_matching_scrims(scrim.played_at, scrim_type_id, map_ids)
 
         if matching_scrim_ids == []:
             print("No matching scrims found. Creating new scrim.")
-            db.insert_scrim(scrim.team_name, scrim.team_contact, scrim.contact_type, scrim.played_at, scrim.map_names)
+            db.insert_scrim(scrim.team_name, scrim.scrim_type, scrim.team_contact, scrim.contact_type, scrim.played_at, scrim.map_names)
+
+            for guild in self.guilds:
+                for channel in guild.channels:
+                    if channel.name == "scrims":
+
+                        maps = sorted(scrim.map_names, key=lambda map_name: 1 if map_name == "no preference" else 0)
+                        date_string = scrim.played_at.strftime("%a, %b/%d at %I:%M%p EST")
+
+                        embed = discord.Embed(title=f"Team '{scrim.team_name}' is LFS", description="to schedule with them please post a scrim at the matching time at http://placeholder.com", color=0x000055)
+                        embed.add_field(name="Time", value=date_string, inline=False)
+                        embed.add_field(name="Type", value=scrim.scrim_type, inline=False)
+                        for index, map_name in enumerate(maps):
+                            embed.add_field(name=f"Map {index + 1}", value=map_name.capitalize(), inline=True)
+
+                        self.message_channel(embed, channel, embed=True)
+
             return SystemCodes.Good
         else:
             scrim_team_data = {
@@ -110,8 +145,9 @@ class NASCBot(discord.Client):
                 print(f"Discovered Team Name: {team_name}, Discovered Team Contact: {team_contact}")
                 matches = db.select_matches_by_scrim_id(scrim_id)
                 maps = [db.select_map_name_from_id(map_id) for _, map_id, _ in matches]
+                scrim_type = db.select_scrim_type_id_from_scrim_id(scrim_id)
 
-                self._propose_scrim(db, Scrim(team_name, team_contact, scrim.played_at, maps), scrim_id, scrim)
+                self._propose_scrim(db, Scrim(team_name, scrim_type, team_contact, scrim.played_at, maps), scrim_id, scrim)
             return SystemCodes.Good
 
     def _propose_scrim(self, db, existing_scrim, existing_scrim_id, proposed_scrim):

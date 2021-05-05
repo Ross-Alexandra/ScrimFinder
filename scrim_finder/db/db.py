@@ -86,14 +86,17 @@ class ScrimFinderDB:
 
         return pmatch_id
 
-    def insert_scrim(self, team_name, team_contact, contact_type, played_at, map_names):
+    def insert_scrim(self, team_name, scrim_type, team_contact, contact_type, played_at, map_names):
         team_id = self.select_team_by_name_and_contact(team_name, team_contact, contact_type)
-
         if team_id is None:
             team_id = self.insert_team(team_name, team_contact, contact_type)
 
+        scrim_type_id = self.select_scrim_type_id_by_name(scrim_type)
+        if scrim_type_id is None:
+            return None
+
         cursor = self._connection.cursor()
-        cursor.execute(queries.Scrims.insert_without_against(), (team_id, played_at))
+        cursor.execute(queries.Scrims.insert_without_against(), (team_id, scrim_type_id, played_at))
 
         if (scrim_id := cursor.fetchone()) is not None:
             scrim_id = scrim_id[0]
@@ -163,7 +166,7 @@ class ScrimFinderDB:
 
         return match_data
 
-    def select_matching_scrims(self, played_at, map_ids):
+    def select_matching_scrims(self, played_at, scrim_type, map_ids):
         """ Returns a list of scrim_ids where the played_at is the same as the passed argument
             and the list of matches for the scrim are compatable with the passed map_ids.
         """
@@ -238,25 +241,33 @@ class ScrimFinderDB:
         simultanious_scrims = self.select_scrims_by_played_at(played_at)
         print(f"Found {len(simultanious_scrims)} matching scrims.")
 
-        no_preference_id = self.select_no_preference_id()
+        no_map_preference_id = self.select_no_map_preference_id()
+        no_scrim_type_preference_id = self.select_no_scrim_type_preference_id()
 
         for scrim in simultanious_scrims:
-            scrim_id, _, _, against = scrim
+            scrim_id, _, scrim_type_id, _, against = scrim
             print(f"Checking for map match against scrim with id {scrim_id}")
 
             if against is not None:
+                print("This scrim already has an opponent.")
+                continue
+
+            if scrim_type_id != no_scrim_type_preference_id and scrim_type != no_scrim_type_preference_id and scrim_type_id != scrim_type:
+                print("This scrim does not match the match type.")
                 continue
 
             scrim_matches = self.select_matches_by_scrim_id(scrim_id)
             scrim_maps = [map_id for _, map_id, _ in scrim_matches]
 
-            if lists_match(map_ids, scrim_maps, no_preference_id):
+            if lists_match(map_ids, scrim_maps, no_map_preference_id):
                 print(f"Scrim with id {scrim_id} matches.")
                 matching_scrims.append(scrim_id)
+            else:
+                print("Maps did not match.")
 
         return matching_scrims
 
-    def select_no_preference_id(self):
+    def select_no_map_preference_id(self):
         cursor = self._connection.cursor()
 
         cursor.execute(queries.Maps.select_id_by_name(), ("no preference",))
@@ -268,6 +279,19 @@ class ScrimFinderDB:
         cursor.close()
 
         return map_id
+
+    def select_no_scrim_type_preference_id(self):
+        cursor = self._connection.cursor()
+
+        cursor.execute(queries.ScrimTypes.select_id_by_longname(), ("no preference",))
+
+        if (type_id := cursor.fetchone()) is not None:
+            type_id = type_id[0]
+
+        self._connection.commit()
+        cursor.close()
+
+        return type_id
 
     def select_proposal_id_by_team_id_and_scrim_id(self, team_id, scrim_id):
         cursor = self._connection.cursor()
@@ -291,6 +315,30 @@ class ScrimFinderDB:
         cursor.close()
 
         return scrim_data
+
+    def select_scrim_type_id_by_name(self, type_name):
+        cursor = self._connection.cursor()
+        cursor.execute(queries.ScrimTypes.select_id_by_longname(), (type_name,))
+
+        if (type_id := cursor.fetchone()) is not None:
+            type_id = type_id[0]
+        
+        self._connection.commit()
+        cursor.close()
+
+        return type_id
+
+    def select_scrim_type_id_from_scrim_id(self, scrim_id):
+        cursor = self._connection.cursor()
+        cursor.execute(queries.Scrims.select_scrim_type_id(), (scrim_id,))
+
+        if (type_id := cursor.fetchone()) is not None:
+            type_id = type_id[0]
+
+        self._connection.commit()
+        cursor.close()
+
+        return type_id
 
     def select_team_by_name_and_contact(self, team_name, contact, contact_type):
         contact_type_id = self.convert_contact_type_to_id(contact_type)

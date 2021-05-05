@@ -47,19 +47,24 @@ class Scrims:
 
     @staticmethod
     def insert_without_against():
-        return "INSERT INTO scrims(team_id, played_at) values(%s, %s) RETURNING scrim_id;" 
+        return "INSERT INTO scrims(team_id, scrim_type, played_at) values(%s, %s, %s) RETURNING scrim_id;" 
 
     @staticmethod
     def select_by_played_at():
-        return "SELECT scrim_id, team_id, played_at, against FROM scrims WHERE played_at=%s;"
+        return "SELECT scrim_id, team_id, scrim_type, played_at, against FROM scrims WHERE played_at=%s;"
 
     @staticmethod
-    def select_by_played_at_and_contact():
-        return "SELECT scrim_id, team_id, played_at, against FROM scrims WHERE played_at=%s and contact="
+    def select_scrim_type_id():
+        return "SELECT scrim_type FROM scrims WHERE scrim_id=%s;"
 
     @staticmethod
     def select_team_id():
         return "SELECT team_id FROM scrims WHERE scrim_id=%s;"
+
+class ScrimTypes:
+    @staticmethod
+    def select_id_by_longname():
+        return "SELECT type_id FROM scrim_types WHERE longname=%s;"
 
 class Teams:
     @staticmethod

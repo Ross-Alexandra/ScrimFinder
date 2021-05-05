@@ -22,9 +22,15 @@ CREATE TABLE guild_teams (
     proposal_channel bigint
 );
 
+CREATE TABLE scrim_types (
+    type_id serial primary key,
+    longname VARCHAR(15) NOT NULL
+);
+
 CREATE TABLE scrims (
     scrim_id serial PRIMARY KEY,
     team_id integer REFERENCES teams(team_id),
+    scrim_type integer REFERENCES scrim_type(type_id),
     played_at timestamp with time zone,
     against integer REFERENCES teams(team_id)  -- If this is NULL then we are still searching.
 );
@@ -48,6 +54,10 @@ CREATE TABLE proposed_matches (
 );
 
 INSERT INTO contact_types(longname) VALUES('Discord');
+
+INSERT INTO scrim_types(longname) VALUES('gameday');
+INSERT INTO scrim_types(longname) VALUES('6-6');
+INSERT INTO scrim_types(longname) VALUES('no preference');
 
 INSERT INTO maps(map_name) VALUES('not played');
 INSERT INTO maps(map_name) VALUES('no preference');
