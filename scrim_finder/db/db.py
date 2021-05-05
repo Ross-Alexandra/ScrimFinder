@@ -51,7 +51,7 @@ class ScrimFinderDB:
         if map_id is None:
             return None
 
-        cursor = self._connection.commit()
+        cursor = self._connection.cursor()
         cursor.execute(queries.Matches.insert(), (map_id, scrim_id))
 
         if (match_id := cursor.fetchone()) is not None:
@@ -61,6 +61,30 @@ class ScrimFinderDB:
         cursor.close()
 
         return match_id
+
+    def insert_proposal(self, scrim_id, team_id):
+        cursor = self._connection.cursor()
+        cursor.execute(queries.Proposals.insert(), (scrim_id, team_id))
+
+        if (proposal_id := cursor.fetchone()) is not None:
+            proposal_id = proposal_id[0]
+
+        self._connection.commit()
+        cursor.close()
+
+        return proposal_id
+
+    def insert_proposed_match(self, map_id, proposal_id):
+        cursor = self._connection.cursor()
+        cursor.execute(queries.ProposedMatches.insert(), (map_id, proposal_id))
+
+        if (pmatch_id := cursor.fetchone()) is not None:
+            pmatch_id = pmatch_id[0]
+
+        self._connection.commit()
+        cursor.close()
+
+        return pmatch_id
 
     def insert_scrim(self, team_name, team_contact, contact_type, played_at, map_names):
         team_id = self.select_team_by_name_and_contact(team_name, team_contact, contact_type)
@@ -106,7 +130,7 @@ class ScrimFinderDB:
 
     def select_map_id_from_name(self, map_name):
         cursor = self._connection.cursor()
-        cursor.execute(queries.Maps.select_id_by_name(), (map_name.lower(),))
+        cursor.execute(queries.Maps.select_id_by_name(), (map_name.strip().lower(),))
 
         if (map_id := cursor.fetchone()) is not None:
             map_id = map_id[0]
@@ -120,7 +144,8 @@ class ScrimFinderDB:
         cursor = self._connection.cursor()
         cursor.execute(queries.Maps.select_name(), (map_id,))
 
-        map_name = cursor.fetchone()
+        if (map_name := cursor.fetchone()) is not None:
+            map_name = map_name[0]
 
         self._connection.commit()
         cursor.close()
@@ -129,7 +154,7 @@ class ScrimFinderDB:
 
     def select_matches_by_scrim_id(self, scrim_id):
         cursor = self._connection.cursor()
-        cursor.execute(queries.Matches.select_id_by_scrim_id, (scrim_id,))
+        cursor.execute(queries.Matches.select_by_scrim_id(), (scrim_id,))
 
         match_data = cursor.fetchall()
 
@@ -143,40 +168,118 @@ class ScrimFinderDB:
             and the list of matches for the scrim are compatable with the passed map_ids.
         """
 
+        # Define internal helper function.
+        def lists_match(maps_1, maps_2, no_preference):
+            """ Extremely over optimized, but I wanted to prove it could be done in O(n) """
+
+            if len(maps_1) != len(maps_2):
+                return False
+
+            # Scrape out the no_preference id's.
+            # These will be accounted for later, but
+            # should not be tallied with the rest of the maps.
+            no_preference_1 = maps_1.count(no_preference)
+            no_preference_2 = maps_2.count(no_preference)
+            maps_1 = [map_id for map_id in maps_1 if map_id != no_preference]
+            maps_2 = [map_id for map_id in maps_2 if map_id != no_preference]
+
+            # Get the combined list as this is done a few times.
+            combined_maps = set(maps_1 + maps_2)
+
+            # Convert each set of maps into a set (O(n)) and set
+            # each internal id to 0.
+            map_1_counts = {map_id: 0 for map_id in combined_maps}
+            map_2_counts = {map_id: 0 for map_id in combined_maps}
+
+            # Walk through list of maps and count each occurrence in
+            # the respective dictionaries. 1 pass therefore O(n)
+            for map_id in maps_1:
+                map_1_counts[map_id] += 1
+
+            for map_id in maps_2:
+                map_2_counts[map_id] += 1
+
+            # List + List = O(1)
+            # List => set = O(n)
+            # Therefore do a O(n) operation,
+            # then for each of the ids, compare
+            # their counts. If they're equal then
+            # this map is confirmed n times (where 
+            # n = the count). Equality Checking
+            # is O(1) so this loop is O(n).
+            confirmed_maps = []
+            maps_1_imbalance = []
+            maps_2_imbalance = []
+            for map_id in combined_maps:
+                
+                # If the counts are equal, then confirm this map
+                # n times.
+                if map_1_counts[map_id] == map_2_counts[map_id]:
+                    # ([a] * n).count(a) == n.
+                    confirmed_maps += ([map_id] * map_2_counts[map_id])
+
+                # Otherwise, if map_1_counts has more then
+                # There are map_2_counts matches and 
+                # (map_1_counts - map_2_counts) map 1 imbalances.
+                elif map_1_counts[map_id] > map_2_counts[map_id]:
+                    confirmed_maps += ([map_id] * map_2_counts[map_id])
+                    maps_1_imbalance += ([map_id] * (map_1_counts[map_id] - map_2_counts[map_id]))
+                
+                # Otherwise, opposite of above.
+                else:
+                    confirmed_maps += ([map_id] * map_1_counts[map_id])
+                    maps_2_imbalance += ([map_id] * (map_2_counts[map_id] - map_1_counts[map_id]))
+
+            return len(maps_1_imbalance) <= no_preference_2 and len(maps_2_imbalance) <= no_preference_1
+
         matching_scrims = []
 
         # Get all scrims happening at the same time as this one.
         simultanious_scrims = self.select_scrims_by_played_at(played_at)
-        for scrim in simultanious_scrims:
+        print(f"Found {len(simultanious_scrims)} matching scrims.")
 
-            # For each scrim, 
+        no_preference_id = self.select_no_preference_id()
+
+        for scrim in simultanious_scrims:
             scrim_id, _, _, against = scrim
+            print(f"Checking for map match against scrim with id {scrim_id}")
 
             if against is not None:
                 continue
 
             scrim_matches = self.select_matches_by_scrim_id(scrim_id)
-            
-            total_no_preference = 0
-            total_matches = 0
-            confirmed_maps = []
-            for match in scrim_matches:
-                _, map_id, _ = match
+            scrim_maps = [map_id for _, map_id, _ in scrim_matches]
 
-                if map_id == 1:
-                    total_no_preference += 1
-                else:
-                    if map_id in map_ids:
-                        confirmed_maps.append(map_id)
-                
-                total_matches += 1
-
-            total_unconfirmed_maps = len(set(map_ids) - set(confirmed_maps))
-
-            if total_no_preference >= total_unconfirmed_maps:
+            if lists_match(map_ids, scrim_maps, no_preference_id):
+                print(f"Scrim with id {scrim_id} matches.")
                 matching_scrims.append(scrim_id)
 
         return matching_scrims
+
+    def select_no_preference_id(self):
+        cursor = self._connection.cursor()
+
+        cursor.execute(queries.Maps.select_id_by_name(), ("no preference",))
+
+        if (map_id := cursor.fetchone()) is not None:
+            map_id = map_id[0]
+
+        self._connection.commit()
+        cursor.close()
+
+        return map_id
+
+    def select_proposal_id_by_team_id_and_scrim_id(self, team_id, scrim_id):
+        cursor = self._connection.cursor()
+        cursor.execute(queries.Proposals.select_id_by_team_and_scrim_id(), (team_id, scrim_id))
+
+        if (proposal_id := cursor.fetchone()) is not None:
+            proposal_id = proposal_id[0]
+
+        self._connection.commit()
+        cursor.close()
+
+        return proposal_id
 
     def select_scrims_by_played_at(self, played_at):
         cursor = self._connection.cursor()
@@ -211,7 +314,7 @@ class ScrimFinderDB:
     def select_team_from_scrim_id(self, scrim_id):
         cursor = self._connection.cursor()
         
-        cursor.execute(queries.Scrims.select_team_id)
+        cursor.execute(queries.Scrims.select_team_id(), (scrim_id,))
 
         if (team_id := cursor.fetchone()) is not None:
             team_id = team_id[0]

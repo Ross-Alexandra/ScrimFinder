@@ -44,7 +44,7 @@ class NASCBot(discord.Client):
 
             if isinstance(queue_message, Scrim):
                 if self._user_in_guilds(queue_message.team_contact):
-                    self._add_scrim(queue_message)
+                    response_code = self._add_scrim(queue_message)
                 else:
                     response_code = UserCodes.BadContact
             else:
@@ -88,20 +88,56 @@ class NASCBot(discord.Client):
     # =========== Bot Utilities =========== #
     def _add_scrim(self, scrim):
         db = ScrimFinderDB()
-        matching_scrims = db.select_matching_scrims(scrim.played_at, scrim.map_names)
 
-        if matching_scrims == []:
+        map_ids = [db.select_map_id_from_name(map_name) for map_name in scrim.map_names]
+        matching_scrim_ids = db.select_matching_scrims(scrim.played_at, map_ids)
+
+        if matching_scrim_ids == []:
+            print("No matching scrims found. Creating new scrim.")
             db.insert_scrim(scrim.team_name, scrim.team_contact, scrim.contact_type, scrim.played_at, scrim.map_names)
+            return SystemCodes.Good
         else:
-            for matching_scrim in matching_scrims:
-                _, team_name, team_contact, _ = db.select_team_from_scrim_id(matching_scrim)
-                matches = db.select_matches_by_scrim_id(matching_scrim)
-                maps = [db.select_map_name_from_id(map_id) for match_id, map_id, scrim_id in matches]
+            scrim_team_data = {
+                matching_scrim_id: db.select_team_from_scrim_id(matching_scrim_id) for matching_scrim_id in matching_scrim_ids
+            }
 
-                self._propose_scrim(Scrim(team_name, team_contact, scrim.played_at, maps), scrim)
+            if any([contact == scrim.team_contact and contact_type == scrim.contact_type for _, _, contact, contact_type in scrim_team_data.values()]):
+                return UserCodes.DoubleBooking
 
-    def _propose_scrim(self, existing_scrim, proposed_scrim):
-        print(f"I would be attempting to propose a scrim between: \n{existing_scrim}\nand\n{proposed_scrim}")
+            for scrim_id, team_tuple in scrim_team_data.items():
+                _, team_name, team_contact, _ = team_tuple
+
+                print(f"Discovered Team Name: {team_name}, Discovered Team Contact: {team_contact}")
+                matches = db.select_matches_by_scrim_id(scrim_id)
+                maps = [db.select_map_name_from_id(map_id) for _, map_id, _ in matches]
+
+                self._propose_scrim(db, Scrim(team_name, team_contact, scrim.played_at, maps), scrim_id, scrim)
+            return SystemCodes.Good
+
+    def _propose_scrim(self, db, existing_scrim, existing_scrim_id, proposed_scrim):
+        team_id = db.select_team_by_name_and_contact(proposed_scrim.team_name, proposed_scrim.team_contact, proposed_scrim.contact_type)
+
+        # If the team_id does not exist, create a new team for it.
+        if team_id is None:
+            team_id = db.insert_team(proposed_scrim.team_name, proposed_scrim.team_contact, proposed_scrim.contact_type)
+
+        # Otherwise, if the team id does exist and there is already a proposal on this scrim
+        # by this team, then don't create a new one.
+        elif db.select_proposal_id_by_team_id_and_scrim_id(team_id, existing_scrim_id) is not None:
+            print(f"Proposal already exists for this team on this scrim. Moving on to next proposal.")
+            return 
+
+        print(f"Proposing a scrim between: \n{existing_scrim}\nand\n{proposed_scrim}")
+        proposal_id = db.insert_proposal(existing_scrim_id, team_id)
+
+        total_maps = len(proposed_scrim.map_names)
+        map_pool = [map_name for map_name in set(existing_scrim.map_names + proposed_scrim.map_names) if map_name != 'no preference']
+
+        while len(map_pool) < total_maps: map_pool.append('no preference')
+
+        print(f"Generating match proposals with condensed match pool of: {map_pool}")
+        for map_name in map_pool:
+            db.insert_proposed_match(db.select_map_id_from_name(map_name), proposal_id)
 
     def _user_in_guilds(self, user_name):
         for guild in self.guilds:

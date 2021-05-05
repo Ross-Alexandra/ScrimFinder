@@ -23,8 +23,22 @@ class Matches:
         return "INSERT INTO matches(map_id, scrim_id) values(%s, %s) RETURNING match_id;"
 
     @staticmethod
-    def select_id_by_scrim_id():
-        return "SELECT match_id FROM matches WHERE scrim_id=%s;"
+    def select_by_scrim_id():
+        return "SELECT match_id, map_id, scrim_id FROM matches WHERE scrim_id=%s;"
+
+class Proposals:
+    @staticmethod
+    def insert():
+        return "INSERT INTO proposals(scrim_id, team_id) values(%s, %s) RETURNING proposal_id;"
+
+    @staticmethod
+    def select_id_by_team_and_scrim_id():
+        return "SELECT proposal_id FROM proposals WHERE team_id=%s and scrim_id=%s;"
+
+class ProposedMatches:
+    @staticmethod
+    def insert():
+        return "INSERT INTO proposed_matches(map_id, proposal_id) values(%s, %s) RETURNING proposed_match_id;"
 
 class Scrims:
     @staticmethod
@@ -38,6 +52,10 @@ class Scrims:
     @staticmethod
     def select_by_played_at():
         return "SELECT scrim_id, team_id, played_at, against FROM scrims WHERE played_at=%s;"
+
+    @staticmethod
+    def select_by_played_at_and_contact():
+        return "SELECT scrim_id, team_id, played_at, against FROM scrims WHERE played_at=%s and contact="
 
     @staticmethod
     def select_team_id():

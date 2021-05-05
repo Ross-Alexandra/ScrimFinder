@@ -49,14 +49,15 @@ CREATE TABLE proposed_matches (
 
 INSERT INTO contact_types(longname) VALUES('Discord');
 
-INSERT INTO maps(map_name) VALUES('Not Played');
-INSERT INTO maps(map_name) VALUES('Kafe');
-INSERT INTO maps(map_name) VALUES('Villa');
-INSERT INTO maps(map_name) VALUES('Oregon');
-INSERT INTO maps(map_name) VALUES('Coastline');
-INSERT INTO maps(map_name) VALUES('Chalet');
-INSERT INTO maps(map_name) VALUES('Consulate');
-INSERT INTO maps(map_name) VALUES('Clubhouse');
+INSERT INTO maps(map_name) VALUES('not played');
+INSERT INTO maps(map_name) VALUES('no preference');
+INSERT INTO maps(map_name) VALUES('kafe');
+INSERT INTO maps(map_name) VALUES('villa');
+INSERT INTO maps(map_name) VALUES('oregon');
+INSERT INTO maps(map_name) VALUES('coastline');
+INSERT INTO maps(map_name) VALUES('chalet');
+INSERT INTO maps(map_name) VALUES('consulate');
+INSERT INTO maps(map_name) VALUES('clubhouse');
 
 grant all on database siegescheduler TO siegescheduler;
 grant all on schema public to siegescheduler;
