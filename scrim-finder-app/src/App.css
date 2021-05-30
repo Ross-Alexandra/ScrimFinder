@@ -7,21 +7,24 @@
   pointer-events: none;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
-}
-
 .App-header {
-  background-color: #282c34;
-  min-height: 100vh;
+  background-color: #444548;
+  height: 13vh;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  font-size: calc(10px + 2vmin);
+  font-size: 6.66vh;
+  font-family: 'Alegreya';
+  letter-spacing: .199em;
   color: white;
+}
+
+.App-body {
+    background-color: #222326;
+    height: 87vh;
+    width: 100vw;
+    color: white;
 }
 
 .App-link {

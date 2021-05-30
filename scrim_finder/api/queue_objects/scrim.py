@@ -1,6 +1,9 @@
+from datetime import datetime
+
+
 class Scrim:
     
-    def __init__(self, team_name, scrim_type, team_contact, played_at, map_names):
+    def __init__(self, team_name: str, scrim_type: str, team_contact: str, played_at: datetime, map_names: list):
         self.team_name = team_name
         self.scrim_type = scrim_type
         self.played_at = played_at

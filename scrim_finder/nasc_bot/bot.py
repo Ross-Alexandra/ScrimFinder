@@ -1,6 +1,8 @@
 import asyncio
 import datetime
+from scrim_finder.db.queries import Matches
 import discord
+import functools
 from multiprocessing.connection import Listener
 import re
 import sched
@@ -75,6 +77,74 @@ class NASCBot(discord.Client):
         for guild in self.guilds:
             print(f"{guild.name}: {guild.id}")
 
+    async def on_raw_reaction_add(self, payload):
+        if payload.event_type != "REACTION_ADD":
+            print("Wrong event type, ignoring.")
+
+        channel = await self.fetch_channel(payload.channel_id)
+        message = await channel.fetch_message(payload.message_id)
+        if message.author.id != self.user.id:
+            print(f"Reacted to message by author with id {message.author.id}. Bot id is {self.user.id}")
+            return
+
+        db = ScrimFinderDB()
+        if (message_obj := db.select_message_by_id(payload.message_id)) is not None:
+            _, message_type_id, reference_id = message_obj
+            message_type = db.select_message_type_name_from_id(message_type_id)
+             
+            if message_type == "proposal":
+                # We know this was a proposal message thus we know
+                # that this reference_id must be a proposal_id
+                proposal_id = reference_id
+                _, scrim_id, _, rejected = db.select_proposal(proposal_id)
+                _, _, _, _, against = db.select_scrim(scrim_id)
+
+                if rejected:
+                    print("Reaction made after a rejection was already processed. Ignoring it.")
+                    return
+
+                if against is not None:
+                    print("A match was already found for this scrim. Ignore this reaction.")
+                    return
+
+                confirm_unicode = '\N{THUMBS UP SIGN}'
+                decline_unicode = '\N{THUMBS DOWN SIGN}'
+                reaction_count = next(reaction for reaction in message.reactions if reaction.emoji.strip() == payload.emoji.name).count
+                if reaction_count > 1 and payload.emoji.name == confirm_unicode:
+                    self._send_confirmation(db, payload.message_id, proposal_id)
+
+                elif reaction_count > 1 and payload.emoji.name == decline_unicode:
+                    _, scrim_id, pteam_id, _ = db.select_proposal(proposal_id)
+                    _, steam_id, scrim_type, played_at, _ = db.select_scrim(scrim_id)
+                    _, _, scrim_contact, _ = db.select_team(steam_id)
+                    _, proposal_team, proposal_contact, _ = db.select_team(pteam_id)
+
+                    scrim_type_name = db.select_scrim_type_name_by_id(scrim_type)
+                    scrim_user = self._get_user_by_discriminator(scrim_contact)
+                    proposal_user = self._get_user_by_discriminator(proposal_contact)
+
+                    matches = db.select_matches_by_scrim_id(scrim_id)
+                    map_pool = [db.select_map_name_from_id(map_id) for (_, map_id, _) in matches]
+
+                    db.reject_proposal(proposal_id)
+                    self._send_rejection(db, scrim_user)
+                    self._send_rejection(db, proposal_user)
+                    
+                    # Since add scrim only creates one proposal object, once
+                    # this one is rejected (and therefore no longer) 
+                    # counted as a matching scrim, just attempt to readd the scrim
+                    # and either get the next proposal, or create this scrim.
+                    proposal_scrim = Scrim(proposal_team, scrim_type_name, proposal_contact, played_at, map_pool)
+                    self._add_scrim(proposal_scrim)
+
+            else:
+                print(f"Reaction was to a message of type {message_type}. No operation needed.")
+        else:
+            print(f"I have no history of this message. Ignoring.")
+
+    async def on_member_join(self, member):
+        pass
+
     async def on_guild_join(self, guild):
         pass
 
@@ -87,33 +157,39 @@ class NASCBot(discord.Client):
         await cp.run()
 
     # =========== Bot Utilities =========== #
-    def message_channel(self, msg, channel: discord.abc.Messageable, embed=False):
-        #asyncio.set_event_loop(self.loop)
-        print("Sending message to discord.")
+    def _add_reactions(self, message, reactions):
+        for reaction in reactions:
+            asyncio.run_coroutine_threadsafe(message.add_reaction(reaction), self.loop)
 
-        try:
-            if not embed:
-                asyncio.run_coroutine_threadsafe(channel.send(content=msg), self.loop)
-            else:
-                asyncio.run_coroutine_threadsafe(channel.send(embed=msg), self.loop)
-            print("Message should be sent.")
-
-        # An exception is always thrown, but the message is also
-        # always sent....... TODO: Look into this.
-        except Exception:
-            print(f"Error while sending message to discord. This may not be fatal\n")
-            traceback.print_exc()
-
-    def _add_scrim(self, scrim):
+    def _add_scrim(self, scrim: Scrim):
         db = ScrimFinderDB()
+
+        # Get the team id, and see if this team already has a scrim at this time.
+        if (team_id := db.select_team_by_name_and_contact(scrim.team_name, scrim.team_contact, scrim.contact_type)) is None:
+            
+            # Create a new team, and move on. We know this team
+            # does not already have a scrim at this time as
+            # this team didn't exist yet.
+            team_id = db.insert_team(scrim.team_name, scrim.team_contact, scrim.contact_type)
+        else:
+            # Check if this team already has a scrim played at this time.
+            if team_id in [team_id for (_, team_id, _, _, _) in db.select_scrims_by_played_at(scrim.played_at)]:
+                print("This team already has a scrim at this time.")
+                return UserCodes.DoubleBooking
+
+            # See if this team already has a non-rejected proposal
+            # at this time.
+            if db.count_proposals_with_team_and_played_at(team_id, scrim.played_at) != 0:
+                print("This team already has a non-rejected proposal at this time.")
+                return UserCodes.PendingProposal
 
         map_ids = [db.select_map_id_from_name(map_name) for map_name in scrim.map_names]
         scrim_type_id = db.select_scrim_type_id_by_name(scrim.scrim_type)
-        matching_scrim_ids = db.select_matching_scrims(scrim.played_at, scrim_type_id, map_ids)
+        matching_scrim_ids = db.select_matching_scrims(team_id, scrim.played_at, scrim_type_id, map_ids)
 
         if matching_scrim_ids == []:
             print("No matching scrims found. Creating new scrim.")
-            db.insert_scrim(scrim.team_name, scrim.scrim_type, scrim.team_contact, scrim.contact_type, scrim.played_at, scrim.map_names)
+            scrim_id = db.insert_scrim(scrim.team_name, scrim.scrim_type, scrim.team_contact, scrim.contact_type, scrim.played_at, scrim.map_names)
 
             for guild in self.guilds:
                 for channel in guild.channels:
@@ -128,7 +204,7 @@ class NASCBot(discord.Client):
                         for index, map_name in enumerate(maps):
                             embed.add_field(name=f"Map {index + 1}", value=map_name.capitalize(), inline=True)
 
-                        self.message_channel(embed, channel, embed=True)
+                        self._message_channel(db, embed, channel, "scrim", scrim_id, embed=True)
 
             return SystemCodes.Good
         else:
@@ -136,19 +212,121 @@ class NASCBot(discord.Client):
                 matching_scrim_id: db.select_team_from_scrim_id(matching_scrim_id) for matching_scrim_id in matching_scrim_ids
             }
 
-            if any([contact == scrim.team_contact and contact_type == scrim.contact_type for _, _, contact, contact_type in scrim_team_data.values()]):
-                return UserCodes.DoubleBooking
+            # Select any value from the scrim team data and
+            # propose this scrim. This allows us to
+            # have a "large recrusive loop" where:
+            #   React -> _add_scrim()
+            #   _add_scrim() -> new proposal
+            #   new proposal -> rejected
+            #   rejected -> _add_scrim()
+            #   ...
+            #   new_proposal -> accepted
+            #     -- or --
+            #   _add_scrim -> new scrim. 
+            scrim_id = next(iter(scrim_team_data))
+            _, team_name, team_contact, _ = scrim_team_data[scrim_id]
 
-            for scrim_id, team_tuple in scrim_team_data.items():
-                _, team_name, team_contact, _ = team_tuple
+            # Get the matches and the map for the scrim_id
+            # in order to create a scrim object of the original scrim.
+            print(f"Discovered Team Name: {team_name}, Discovered Team Contact: {team_contact}")
+            matches = db.select_matches_by_scrim_id(scrim_id)
+            maps = [db.select_map_name_from_id(map_id) for _, map_id, _ in matches]
+            original_scrim = Scrim(team_name, scrim.scrim_type, team_contact, scrim.played_at, maps)
 
-                print(f"Discovered Team Name: {team_name}, Discovered Team Contact: {team_contact}")
-                matches = db.select_matches_by_scrim_id(scrim_id)
-                maps = [db.select_map_name_from_id(map_id) for _, map_id, _ in matches]
-                scrim_type = db.select_scrim_type_id_from_scrim_id(scrim_id)
+            # Get info on the proposal and the finalized map pool
+            # to be used in the embed.
+            proposal_id = self._propose_scrim(db, original_scrim, scrim_id, scrim)
+            proposee_name = original_scrim.team_name
+            proposer_name = scrim.team_name
+            date_string = original_scrim.played_at.strftime("%a, %b/%d at %I:%M%p EST")
+            map_pool = [map_name if map_name != 'no preference' else 'TBD' for map_name in self._get_map_pool(original_scrim.map_names, scrim.map_names)]
 
-                self._propose_scrim(db, Scrim(team_name, scrim_type, team_contact, scrim.played_at, maps), scrim_id, scrim)
+            # Create an embed which will be sent to both the
+            # contact for the scirm and the contact for the
+            # proposal.
+            embed = discord.Embed(title=f"Scrim Proposal", description=f"{scrim.scrim_type} scrim with '{proposee_name}' and '{proposer_name}'", color=0x005500)
+            embed.add_field(name="Time", value=date_string, inline=False)
+            for index, map_name in enumerate(map_pool):
+                embed.add_field(name=f"Map {index + 1}", value=map_name.capitalize(), inline=True)
+
+            # Loop over all the guilds the bot is in
+            # in an attempt to find the 2 users.
+            # This loop will then send the earlier created
+            # embeds to both those users (and flags are here
+            # to ensure it is only sent once per user.)
+            dmed_proposer = False
+            dmed_proposee = False
+            create_message_callback = lambda channel: self._message_channel(db, embed, channel, "proposal", proposal_id, embed=True, reactions=['\N{THUMBS UP SIGN}', '\N{THUMBS DOWN SIGN}'])
+            for guild in self.guilds:
+                if dmed_proposee is False and (user := guild.get_member_named(original_scrim.team_contact)) is not None:
+                    dmed_proposee = True
+                    print(f"Dm-ing {original_scrim.team_contact}")
+                    self._dm_user(user, create_message_callback)
+
+                if dmed_proposer is False and (user := guild.get_member_named(scrim.team_contact)) is not None:
+                    dmed_proposer = True
+                    print(f"Dm-ing {scrim.team_contact}")
+                    self._dm_user(user, create_message_callback)
+
+            # TODO: Need to handle this case in a better way than just logging.
+            # The proposal didn't go through and a team will get stuck without
+            # some sort of time limit.
+            if not dmed_proposee:
+                print(f"Unable to dm {original_scrim.team_contact} for unknown reason. Bot was unable to locate this user.")
+            if not dmed_proposer:
+                print(f"Unable to dm {scrim.team_contact} for unknown reason. Bot was unable to locate this user.")
+
             return SystemCodes.Good
+
+    def _get_map_pool(self, map_set_1, map_set_2):
+        total_maps = len(map_set_1)
+        map_pool = [map_name for map_name in set(map_set_1 + map_set_2) if map_name != 'no preference']
+
+        while len(map_pool) < total_maps: map_pool.append('no preference')
+
+        return map_pool
+
+    def _get_user_by_discriminator(self, discriminator):
+        for guild in self.guilds:
+            if (user := guild.get_member_named(discriminator)) is not None:
+                return user
+        
+        return None
+
+    def _dm_user(self, user: discord.User, message_channel_callback):
+        if user.dm_channel is None:
+            create_message = lambda fut: message_channel_callback(fut.result())
+
+            fut = asyncio.run_coroutine_threadsafe(user.create_dm(), self.loop)
+            fut.add_done_callback(create_message)
+        else:
+            message_channel_callback(user.dm_channel)
+
+    def _message_channel(self, db, msg, channel: discord.abc.Messageable, message_type, reference_id, embed=False, reactions=list([])):
+        print(f"Sending message of type {message_type} for object with id {reference_id} to discord.")
+
+        try:
+            if embed:
+                fut = asyncio.run_coroutine_threadsafe(channel.send(embed=msg), self.loop)
+            else:
+                fut = asyncio.run_coroutine_threadsafe(channel.send(content=msg), self.loop)
+            print("Message is sent.")
+
+            if message_type is not None and reference_id is not None:
+                def create_message_entry_callback(fut):
+                    db.insert_message(fut.result().id, message_type, reference_id)
+
+                fut.add_done_callback(create_message_entry_callback)
+
+            if reactions != []:
+                def add_reaction_callback(fut):
+                    self._add_reactions(fut.result(), reactions)
+
+                fut.add_done_callback(add_reaction_callback)
+
+        except Exception:
+            print(f"Error while sending message to discord. This may not be fatal\n")
+            traceback.print_exc()
 
     def _propose_scrim(self, db, existing_scrim, existing_scrim_id, proposed_scrim):
         team_id = db.select_team_by_name_and_contact(proposed_scrim.team_name, proposed_scrim.team_contact, proposed_scrim.contact_type)
@@ -166,14 +344,67 @@ class NASCBot(discord.Client):
         print(f"Proposing a scrim between: \n{existing_scrim}\nand\n{proposed_scrim}")
         proposal_id = db.insert_proposal(existing_scrim_id, team_id)
 
-        total_maps = len(proposed_scrim.map_names)
-        map_pool = [map_name for map_name in set(existing_scrim.map_names + proposed_scrim.map_names) if map_name != 'no preference']
-
-        while len(map_pool) < total_maps: map_pool.append('no preference')
+        map_pool = self._get_map_pool(existing_scrim.map_names, proposed_scrim.map_names)
+        proposed_scrim.map_names = map_pool
 
         print(f"Generating match proposals with condensed match pool of: {map_pool}")
         for map_name in map_pool:
             db.insert_proposed_match(db.select_map_id_from_name(map_name), proposal_id)
+
+        return proposal_id
+
+    def _send_confirmation(self, db, message_id, proposal_id):
+        proposal_message_type_id = db.select_message_type_from_name("proposal")
+
+        messages = db.select_message_by_reference_id(proposal_message_type_id, proposal_id)
+
+        if len(messages) != 2:
+            print(f"Critical error while sending confirmation. Incorrect number of messages found: {messages}")
+
+        confirmer_obj = messages[0] if messages[0][0] == message_id else messages[1]
+        confirmee_obj = messages[1] if messages[0][0] == message_id else messages[0]
+
+        confirmer_confirmation = db.count_total_confirmations(confirmer_obj[0])
+        confirmee_confirmation = db.count_total_confirmations(confirmee_obj[0])
+
+        if confirmer_confirmation == 1:
+            print("This user has already confirmed. Ignoring this reaction.")
+            return
+
+        proposal_team_id, _, proposal_contact, _ = db.select_team_by_reference_id(confirmer_obj[1], confirmer_obj[2])
+        scrim_team_id, _, scrim_contact, _ = db.select_team_from_scrim_id(db.select_scrim_id_from_proposal(proposal_id))
+
+        # TODO: When we update to use more than just discord, update this.
+        proposer = self._get_user_by_discriminator(proposal_contact)
+        scrimer = self._get_user_by_discriminator(scrim_contact)
+
+        if confirmee_confirmation == 1:
+            db.insert_confirmation(message_id)
+
+            print(f"Scrim between teams {proposal_team_id} and {scrim_team_id} has been confirmed.")
+            scrimer_embed = discord.Embed(title=f"Scrim Confirmed", description=f"Please contact {proposal_contact} to get uplay info.", color=0x00aa00)
+            proposer_embed = discord.Embed(title=f"Scrim Confirmed", description=f"Please contact {scrim_contact} to get uplay info.", color=0x00aa00)
+
+            def proposer_callback(channel):
+                self._message_channel(db, proposer_embed, channel, None, None, embed=True)
+
+            def scrimer_callback(channel):
+                self._message_channel(db, scrimer_embed, channel, None, None, embed=True)
+
+            self._dm_user(proposer, proposer_callback)
+            self._dm_user(scrimer, scrimer_callback)
+
+            scrim_id = db.select_scrim_id_from_proposal(proposal_id)
+            db.update_scrim_against(scrim_id, proposal_team_id)
+        else:
+            db.insert_confirmation(message_id)
+
+    def _send_rejection(self, db, user):
+        embed = discord.Embed(title="Scrim Rejected", description="This scrim was rejected by either you or the other party.", color=0xaa0000)
+        def callback(channel):
+            self._message_channel(db, embed, channel, None, None, embed=True)
+
+        self._dm_user(user, callback)
 
     def _user_in_guilds(self, user_name):
         for guild in self.guilds:
@@ -184,6 +415,7 @@ class NASCBot(discord.Client):
 if __name__ == "__main__":
     intents = discord.Intents.default()
     intents.members = True
+    intents.reactions = True
 
     client = NASCBot(intents=intents)
     client.spawn_listener()

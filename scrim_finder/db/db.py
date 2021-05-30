@@ -1,3 +1,5 @@
+from scrim_finder.api.queue_objects import scrim
+from discord.user import ClientUser
 import psycopg2
 
 import scrim_finder.db.db_settings as db_settings
@@ -14,6 +16,12 @@ class ScrimFinderDB:
             port=db_settings.db_port
         )
 
+    def close(self):
+        self._connection.close()
+
+    def cascade_delete_scrim(self, scrim_id):
+        cursor = self._connection.cursor()
+
     def convert_contact_type_to_id(self, contact_type):
         cursor = self._connection.cursor()
         cursor.execute(queries.ContactTypes.select_id_by_type(), (contact_type,))
@@ -28,6 +36,44 @@ class ScrimFinderDB:
         self._connection.commit()
         cursor.close()
         return contact_type_id
+
+    def count_proposals_with_team_and_played_at(self, team_id, played_at):
+        cursor = self._connection.cursor()
+        cursor.execute(queries.Proposals.count_by_team_id_and_played_at(), (team_id, played_at))
+
+        if (proposal_count := cursor.fetchone()) is not None:
+            proposal_count = proposal_count[0]
+        else:
+            proposal_count = 0
+        
+        self._connection.commit()
+        cursor.close()
+
+        return proposal_count
+
+    def count_total_confirmations(self, message_id):
+        cursor = self._connection.cursor()
+        cursor.execute(queries.Confirmations.count_by_message_id(), (message_id,))
+
+        if (confirmation_count := cursor.fetchone()) is not None:
+            confirmation_count = confirmation_count[0]
+
+        self._connection.commit()
+        cursor.close()
+
+        return confirmation_count
+
+    def insert_confirmation(self, message_id):
+        cursor = self._connection.cursor()
+        cursor.execute(queries.Confirmations.insert(), (message_id,))
+
+        if (confirmation_id := cursor.fetchone()) is not None:
+            confirmation_id = confirmation_id[0]
+
+        self._connection.commit()
+        cursor.close()
+
+        return confirmation_id
 
     def insert_guild_team(self, team_name, contact, contact_type, guild_id, schedule_channel, proposal_channel):
         team_id = self.select_team_by_name_and_contact(team_name, contact, contact_type)
@@ -61,6 +107,21 @@ class ScrimFinderDB:
         cursor.close()
 
         return match_id
+
+    def insert_message(self, message_id, message_type, reference_id):
+        type_id = self.select_message_type_from_name(message_type)
+
+        if type_id is None:
+            print(f"Unable to insert message object as there is no known id for {message_type}")
+            return None
+
+        cursor = self._connection.cursor()
+        cursor.execute(queries.Messages.insert(), (message_id, type_id, reference_id))
+
+        self._connection.commit()
+        cursor.close()
+
+        return message_id
 
     def insert_proposal(self, scrim_id, team_id):
         cursor = self._connection.cursor()
@@ -156,6 +217,8 @@ class ScrimFinderDB:
         return map_name
 
     def select_matches_by_scrim_id(self, scrim_id):
+        """ match_id, map_id, scrim_id """
+
         cursor = self._connection.cursor()
         cursor.execute(queries.Matches.select_by_scrim_id(), (scrim_id,))
 
@@ -166,13 +229,13 @@ class ScrimFinderDB:
 
         return match_data
 
-    def select_matching_scrims(self, played_at, scrim_type, map_ids):
+    def select_matching_scrims(self, team_id, played_at, scrim_type, map_ids):
         """ Returns a list of scrim_ids where the played_at is the same as the passed argument
             and the list of matches for the scrim are compatable with the passed map_ids.
         """
 
         # Define internal helper function.
-        def lists_match(maps_1, maps_2, no_preference):
+        def maps_match(maps_1, maps_2, no_preference):
             """ Extremely over optimized, but I wanted to prove it could be done in O(n) """
 
             if len(maps_1) != len(maps_2):
@@ -246,7 +309,7 @@ class ScrimFinderDB:
 
         for scrim in simultanious_scrims:
             scrim_id, _, scrim_type_id, _, against = scrim
-            print(f"Checking for map match against scrim with id {scrim_id}")
+            print(f"Checking for scrim match against scrim with id {scrim_id}")
 
             if against is not None:
                 print("This scrim already has an opponent.")
@@ -256,16 +319,70 @@ class ScrimFinderDB:
                 print("This scrim does not match the match type.")
                 continue
 
+            if any(pteam_id == team_id for pteam_id in self.select_proposal_team_ids_from_scrim(scrim_id)):
+                print("This team already has a proposal on this scrim.")
+                continue
+
+            if any(rejected == False for (_, _, _, rejected) in self.select_proposals_from_scrim_id(scrim_id)):
+                print("This scrim already has an active proposal.")
+                continue
+
             scrim_matches = self.select_matches_by_scrim_id(scrim_id)
             scrim_maps = [map_id for _, map_id, _ in scrim_matches]
 
-            if lists_match(map_ids, scrim_maps, no_map_preference_id):
+            if maps_match(map_ids, scrim_maps, no_map_preference_id):
                 print(f"Scrim with id {scrim_id} matches.")
                 matching_scrims.append(scrim_id)
             else:
                 print("Maps did not match.")
 
         return matching_scrims
+
+    def select_message_by_id(self, message_id):
+        cursor = self._connection.cursor()
+        cursor.execute(queries.Messages.select(), (message_id,))
+
+        message = cursor.fetchone()
+
+        self._connection.commit()
+        cursor.close()
+
+        return message
+    
+    def select_message_by_reference_id(self, message_type_id, reference_id):
+        cursor = self._connection.cursor()
+        cursor.execute(queries.Messages.select_all_by_reference_id(), (message_type_id, reference_id))
+
+        messages = cursor.fetchall()
+
+        self._connection.commit()
+        cursor.close()
+
+        return messages
+
+    def select_message_type_from_name(self, name):
+        cursor = self._connection.cursor()
+        cursor.execute(queries.MessageTypes.select_id_by_longname(), (name,))
+
+        if (type_id := cursor.fetchone()) is not None:
+            type_id = type_id[0]
+
+        self._connection.commit()
+        cursor.close()
+
+        return type_id
+
+    def select_message_type_name_from_id(self, type_id):
+        cursor = self._connection.cursor()
+        cursor.execute(queries.MessageTypes.select_longname_by_id(), (type_id,))
+
+        if (longname := cursor.fetchone()) is not None:
+            longname = longname[0]
+
+        self._connection.commit()
+        cursor.close()
+
+        return longname
 
     def select_no_map_preference_id(self):
         cursor = self._connection.cursor()
@@ -293,6 +410,19 @@ class ScrimFinderDB:
 
         return type_id
 
+    def select_proposal(self, proposal_id):
+        """ proposal_id, scrim_id, team_id, rejected """
+
+        cursor = self._connection.cursor()
+        cursor.execute(queries.Proposals.select(), (proposal_id,))
+
+        proposal = cursor.fetchone()
+
+        self._connection.commit()
+        cursor.close()
+
+        return proposal
+
     def select_proposal_id_by_team_id_and_scrim_id(self, team_id, scrim_id):
         cursor = self._connection.cursor()
         cursor.execute(queries.Proposals.select_id_by_team_and_scrim_id(), (team_id, scrim_id))
@@ -305,7 +435,61 @@ class ScrimFinderDB:
 
         return proposal_id
 
+    def select_proposal_team_ids_from_scrim(self, scrim_id):
+        cursor = self._connection.cursor()
+        cursor.execute(queries.Proposals.select_proposal_from_scrim_id(), (scrim_id,))
+
+        proposals = cursor.fetchall()
+        team_ids = []
+        for proposal in proposals:
+            _, _, team_id, _ = proposal
+            team_ids.append(team_id)
+
+        self._connection.commit()
+        cursor.close()
+
+        return team_ids
+
+    def select_proposals_from_scrim_id(self, scrim_id):
+        """ proposal_id, scrim_id, team_id, rejected """
+        cursor = self._connection.cursor()
+        cursor.execute(queries.Proposals.select_proposal_from_scrim_id(), (scrim_id,))
+
+        proposals = cursor.fetchall()
+
+        self._connection.commit()
+        cursor.close()
+
+        return proposals
+
+    def select_proposals_from_team_id(self, team_id):
+        """ proposal_id, scrim_id, team_id, rejected """
+        cursor = self._connection.cursor()
+        cursor.execute(queries.Proposals.select_proposal_from_team_id(), (team_id,))
+
+        proposals = cursor.fetchall()
+
+        self._connection.commit()
+        cursor.close()
+
+        return proposals
+
+    def select_scrim(self, scrim_id):
+        """ scrim_id, team_id, scrim_type_id, played_at, against """
+
+        cursor = self._connection.cursor()
+        cursor.execute(queries.Scrims.select(), (scrim_id,))
+
+        scrim = cursor.fetchone()
+
+        self._connection.commit()
+        cursor.close()
+
+        return scrim
+
     def select_scrims_by_played_at(self, played_at):
+        """ scrim_id, team_id, scrim_type, played_at, against """ 
+
         cursor = self._connection.cursor()
         cursor.execute(queries.Scrims.select_by_played_at(), (played_at,))
 
@@ -315,6 +499,18 @@ class ScrimFinderDB:
         cursor.close()
 
         return scrim_data
+
+    def select_scrim_id_from_proposal(self, proposal_id):
+        cursor = self._connection.cursor()
+        cursor.execute(queries.Proposals.select_scrim_id(), (proposal_id,))
+
+        if (scrim_id := cursor.fetchone()) is not None:
+            scrim_id = scrim_id[0]
+
+        self._connection.commit()
+        cursor.close()
+
+        return scrim_id
 
     def select_scrim_type_id_by_name(self, type_name):
         cursor = self._connection.cursor()
@@ -340,6 +536,32 @@ class ScrimFinderDB:
 
         return type_id
 
+
+    def select_scrim_type_name_by_id(self, type_id):
+        cursor = self._connection.cursor()
+        cursor.execute(queries.ScrimTypes.select_longname_by_id(), (type_id,))
+
+        if (longname := cursor.fetchone()) is not None:
+            longname = longname[0]
+        
+        self._connection.commit()
+        cursor.close()
+
+        return longname
+
+    def select_team(self, team_id):
+        """ team_id, team_name, contact, contact_type """
+
+        cursor = self._connection.cursor()
+        cursor.execute(queries.Teams.select(), (team_id,))
+
+        team = cursor.fetchone()
+
+        self._connection.commit()
+        cursor.close()
+
+        return team
+
     def select_team_by_name_and_contact(self, team_name, contact, contact_type):
         contact_type_id = self.convert_contact_type_to_id(contact_type)
 
@@ -359,6 +581,17 @@ class ScrimFinderDB:
         cursor.close()
         return team_id
 
+    def select_team_by_reference_id(self, message_type_id, reference_id):
+        cursor = self._connection.cursor()
+        cursor.execute(queries.Messages.select_team_by_reference_id(), {"ref_id": reference_id})
+
+        team_data = cursor.fetchone()
+
+        self._connection.commit()
+        cursor.close()
+
+        return team_data
+
     def select_team_from_scrim_id(self, scrim_id):
         cursor = self._connection.cursor()
         
@@ -374,3 +607,17 @@ class ScrimFinderDB:
         cursor.close()
 
         return team_data
+
+    def reject_proposal(self, proposal_id):
+        cursor = self._connection.cursor()
+        cursor.execute(queries.Proposals.set_rejected(), (proposal_id,))
+
+        self._connection.commit()
+        cursor.close()
+
+    def update_scrim_against(self, scrim_id, team_id):
+        cursor = self._connection.cursor()
+        cursor.execute(queries.Scrims.update_against(), (team_id, scrim_id))
+
+        self._connection.commit()
+        cursor.close()

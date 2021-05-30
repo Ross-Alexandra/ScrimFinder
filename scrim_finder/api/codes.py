@@ -6,7 +6,8 @@ UserCodes = Enum(
     (
         "BadContact",
         "MissingParameters",
-        "DoubleBooking"
+        "DoubleBooking",
+        "PendingProposal"
     ),
     start=0
 )

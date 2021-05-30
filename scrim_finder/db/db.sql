@@ -44,13 +44,30 @@ CREATE TABLE matches (
 CREATE TABLE proposals (
     proposal_id serial PRIMARY KEY,
     scrim_id integer REFERENCES scrims(scrim_id),
-    team_id integer REFERENCES teams(team_id)
+    team_id integer REFERENCES teams(team_id),
+    rejected boolean DEFAULT FALSE
 );
 
 CREATE TABLE proposed_matches (
     proposed_match_id serial,
     map_id integer REFERENCES maps(map_id),
     proposal_id integer REFERENCES proposals(proposal_id)
+);
+
+CREATE TABLE message_types (
+    type_id serial PRIMARY KEY,
+    longname VARCHAR(15)
+);
+
+CREATE TABLE messages (
+    message_id bigint PRIMARY KEY,
+    message_type integer REFERENCES message_types(type_id),
+    reference_id integer
+);
+
+CREATE TABLE confirmations (
+    confirmation_id serial PRIMARY KEY,
+    message_id bigint REFERENCES messages(message_id)
 );
 
 INSERT INTO contact_types(longname) VALUES('Discord');
@@ -68,6 +85,9 @@ INSERT INTO maps(map_name) VALUES('coastline');
 INSERT INTO maps(map_name) VALUES('chalet');
 INSERT INTO maps(map_name) VALUES('consulate');
 INSERT INTO maps(map_name) VALUES('clubhouse');
+
+INSERT INTO message_types(longname) VALUES('scrim');
+INSERT INTO message_types(longname) VALUES('proposal');
 
 grant all on database siegescheduler TO siegescheduler;
 grant all on schema public to siegescheduler;
