@@ -19,7 +19,9 @@ SystemCodes = Enum(
     (
         "Good",
         "CommunicationError",
-        "ExceptionError"
+        "ExceptionError",
+        "ScrimCreated",
+        "ProposalCreated"
     ),
     start=1000
 )

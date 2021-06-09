@@ -1,5 +1,6 @@
 from datetime import datetime
 from multiprocessing.connection import Client
+from re import S
 from flask import request
 from flask_cors import cross_origin
 
@@ -53,7 +54,7 @@ def scrim_request():
     required_parameters = ["team_name", "scrim_type", "team_contact", "played_at", "maps"]
 
     if data is None or not all([x in data.keys() for x in required_parameters]):
-        return "Missing Parameters on request", 400
+        return {"msg": "Missing Parameters on request", "code": UserCodes.MissingParameters}, 400
 
     # Convert the data to usable formats.
     team_name = data["team_name"].lower()
@@ -65,8 +66,8 @@ def scrim_request():
     new_scrim = Scrim(team_name, scrim_type, team_contact, played_at, maps)
     scrim_response = message_bot(new_scrim)
 
-    if scrim_response is not SystemCodes.Good:
+    if scrim_response not in [SystemCodes.Good, SystemCodes.ScrimCreated, SystemCodes.ProposalCreated]:
         print(f"Failed to create scrim. Error code {scrim_response.value}")
-        return f"Failed to book scrim. Error code {scrim_response.value}", 400
+        return {"msg": f"Failed to book scrim.", "code": scrim_response.value}, 400
 
-    return "OK", 200
+    return {"msg": "OK", "code": scrim_response.value}, 200

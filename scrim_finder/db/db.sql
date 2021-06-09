@@ -32,7 +32,8 @@ CREATE TABLE scrims (
     team_id integer REFERENCES teams(team_id),
     scrim_type integer REFERENCES scrim_type(type_id),
     played_at timestamp with time zone,
-    against integer REFERENCES teams(team_id)  -- If this is NULL then we are still searching.
+    cancelled boolean DEFAULT FALSE,
+    against integer REFERENCES teams(team_id),  -- If this is NULL then we are still searching.
 );
 
 CREATE TABLE matches (
@@ -45,7 +46,14 @@ CREATE TABLE proposals (
     proposal_id serial PRIMARY KEY,
     scrim_id integer REFERENCES scrims(scrim_id),
     team_id integer REFERENCES teams(team_id),
-    rejected boolean DEFAULT FALSE
+    rejected boolean DEFAULT FALSE,
+    original_scrim_type integer REFERENCES scrim_types(type_id)
+);
+
+CREATE TABLE original_maps (
+    map_list_id serial PRIMARY KEY,
+    proposal_id integer REFERENCES proposals(proposal_id),
+    map_id integer REFERENCES maps(map_id)
 );
 
 CREATE TABLE proposed_matches (
@@ -61,6 +69,7 @@ CREATE TABLE message_types (
 
 CREATE TABLE messages (
     message_id bigint PRIMARY KEY,
+    channel_id bigint NOT NULL,
     message_type integer REFERENCES message_types(type_id),
     reference_id integer
 );
@@ -88,6 +97,7 @@ INSERT INTO maps(map_name) VALUES('clubhouse');
 
 INSERT INTO message_types(longname) VALUES('scrim');
 INSERT INTO message_types(longname) VALUES('proposal');
+INSERT INTO message_types(longname) VALUES('rejector');
 
 grant all on database siegescheduler TO siegescheduler;
 grant all on schema public to siegescheduler;

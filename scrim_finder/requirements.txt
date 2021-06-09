@@ -2,3 +2,4 @@ discord
 flask
 flask-cors
 psycopg2
+schedule

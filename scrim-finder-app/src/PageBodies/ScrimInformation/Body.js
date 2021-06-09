@@ -15,7 +15,7 @@ class Body extends Component {
 
     render() {
 
-        const minDate = new Date();
+        const minDate = new Date(new Date().toLocaleString("en-US", {timeZone: "America/New_York"}))
         minDate.setHours(minDate.getHours() - 1);
 
         const theme = createMuiTheme({

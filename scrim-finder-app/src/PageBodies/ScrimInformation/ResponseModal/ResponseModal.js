@@ -1,10 +1,15 @@
 import React, { Component } from 'react';
 
 // Import basic modals
-import NetworkErrorModal from './NetworkError';
-import ScrimFoundModal from './ScrimFound';
-import ScrimPostedModal from './ScrimPosted';
-import UnknownErrorModal from './UnknownError';
+import {
+    BadContactModal,
+    DoubleBookingModal,
+    NetworkErrorModal,
+    PendingProposalModal,
+    ScrimFoundModal,
+    ScrimPostedModal,
+    UnknownErrorModal
+ } from './ModalTypes';
 
 
 class ResponseModal extends Component {
@@ -12,7 +17,6 @@ class ResponseModal extends Component {
         super(props);
 
         const response = this.props.response;
-        console.log(response);
 
         // logic to determine what type of response 
         // this is, and create the appropriate modal.
@@ -20,10 +24,34 @@ class ResponseModal extends Component {
             this.modal = (
                 <NetworkErrorModal closeModal={this.props.closeModal}/>
             );
-        } // TODO: Add further logical switches here.
+        } else if (response.code === 0) {
+            this.modal = (
+                <BadContactModal closeModal={this.props.closeModal}/>
+            );
+        } else if (response.code === 1 || response.code === 1001 || response.code === 1002) {
+            this.modal = (
+                <UnknownErrorModal closeModal={this.props.closeModal} code={response.code}/>
+            );
+        } else if (response.code === 2) {
+            this.modal = (
+                <DoubleBookingModal closeModal={this.props.closeModal}/>
+            );
+        } else if (response.code === 3) {
+            this.modal = (
+                <PendingProposalModal closeModal={this.props.closeModal}/>
+            );
+        } else if (response.code === 1003) {
+            this.modal = (
+                <ScrimPostedModal closeModal={this.props.closeModal}/>
+            );
+        } else if (response.code === 1004) {
+            this.modal = (
+                <ScrimFoundModal closeModal={this.props.closeModal}/>
+            );
+        }
         else {
             this.modal = (
-                <UnknownErrorModal closeModal={this.props.closeModal}/>
+                <UnknownErrorModal closeModal={this.props.closeModal} code={-1}/>
             );
         }
     }

@@ -32,15 +32,15 @@ class Maps:
 class Messages:
     @staticmethod
     def insert():
-        return "INSERT INTO messages(message_id, message_type, reference_id) values(%s, %s, %s);"
+        return "INSERT INTO messages(message_id, channel_id, message_type, reference_id) values(%s, %s, %s, %s);"
 
     @staticmethod
     def select():
-        return "SELECT message_id, message_type, reference_id FROM messages WHERE message_id=%s;"
+        return "SELECT message_id, channel_id, message_type, reference_id FROM messages WHERE message_id=%s;"
 
     @staticmethod
     def select_all_by_reference_id():
-        return "SELECT message_id, message_type, reference_id FROM messages WHERE message_type=%s and reference_id=%s;" 
+        return "SELECT message_id, channel_id, message_type, reference_id FROM messages WHERE message_type=%s and reference_id=%s;" 
 
     @staticmethod
     def select_team_by_reference_id():
@@ -101,11 +101,11 @@ class Proposals:
       
     @staticmethod
     def insert():
-        return "INSERT INTO proposals(scrim_id, team_id) values(%s, %s) RETURNING proposal_id;"
+        return "INSERT INTO proposals(scrim_id, team_id, original_scrim_type) values(%s, %s, %s) RETURNING proposal_id;"
 
     @staticmethod
     def select():
-        return "SELECT proposal_id, scrim_id, team_id, rejected FROM proposals WHERE proposal_id=%s;"
+        return "SELECT proposal_id, scrim_id, team_id, rejected, original_scrim_type FROM proposals WHERE proposal_id=%s;"
 
     @staticmethod
     def select_id_by_team_and_scrim_id():
@@ -113,11 +113,7 @@ class Proposals:
 
     @staticmethod
     def select_proposal_from_scrim_id():
-        return "Select proposal_id, scrim_id, team_id, rejected FROM proposals WHERE scrim_id=%s;"
-
-    @staticmethod
-    def select_proposal_from_team_id():
-        return "SELECT proposal_id, scrim_id, team_id, rejected FROM proposals WHERE team_id=%s;"
+        return "Select proposal_id, scrim_id, team_id, rejected, original_scrim_type FROM proposals WHERE scrim_id=%s;"
 
     @staticmethod
     def select_scrim_id():
@@ -127,6 +123,15 @@ class Proposals:
     def set_rejected():
         return "UPDATE proposals SET rejected=TRUE WHERE proposal_id=%s;"
 
+class OriginalMaps:
+    @staticmethod
+    def insert():
+        return "INSERT INTO original_maps(proposal_id, map_id) values(%s, %s);"
+
+    @staticmethod
+    def select_by_proposal_id():
+        return "SELECT map_id from original_maps WHERE proposal_id=%s;"
+
 class ProposedMatches:
     @staticmethod
     def insert():
@@ -134,20 +139,24 @@ class ProposedMatches:
 
 class Scrims:
     @staticmethod
-    def insert():
-        return "INSERT INTO scrims(team_id, played_at, against) values(%s, %s, %s, %s) RETURNING scrim_id;"
-
-    @staticmethod
     def insert_without_against():
         return "INSERT INTO scrims(team_id, scrim_type, played_at) values(%s, %s, %s) RETURNING scrim_id;" 
 
     @staticmethod
     def select():
-        return "SELECT scrim_id, team_id, scrim_type, played_at, against FROM scrims WHERE scrim_id=%s;"
+        return "SELECT scrim_id, team_id, scrim_type, played_at, cancelled, against FROM scrims WHERE scrim_id=%s;"
+
+    @staticmethod
+    def select_overdue_scrims():
+        return "SELECT scrim_id FROM scrims WHERE (played_at + interval '2hr') <= (NOW() at TIME zone 'America/New_York') and DATE(played_at) >= DATE(NOW() - interval '6hr');"
 
     @staticmethod
     def select_by_played_at():
-        return "SELECT scrim_id, team_id, scrim_type, played_at, against FROM scrims WHERE played_at=%s;"
+        return "SELECT scrim_id, team_id, scrim_type, played_at, cancelled, against FROM scrims WHERE played_at=%s;"
+
+    @staticmethod
+    def select_postable_scrims():
+        return "SELECT scrim_id FROM scrims WHERE DATE(played_at) = DATE(NOW() at TIME zone 'America/New_York');"
 
     @staticmethod
     def select_scrim_type_id():
@@ -160,6 +169,10 @@ class Scrims:
     @staticmethod
     def update_against():
         return "UPDATE scrims SET against=%s WHERE scrim_id=%s;"
+
+    @staticmethod
+    def update_cancelled():
+        return "UPDATE scrims SET cancelled=%s WHERE scrim_id=%s;"
 
 class ScrimTypes:
     @staticmethod

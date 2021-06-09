@@ -1,6 +1,5 @@
-from scrim_finder.api.queue_objects import scrim
-from discord.user import ClientUser
 import psycopg2
+from datetime import datetime
 
 import scrim_finder.db.db_settings as db_settings
 import scrim_finder.db.queries as queries
@@ -15,12 +14,18 @@ class ScrimFinderDB:
             password=db_settings.db_pass,
             port=db_settings.db_port
         )
+        self.connected = True
 
     def close(self):
+        self.connected = False
         self._connection.close()
 
-    def cascade_delete_scrim(self, scrim_id):
+    def cancel_scrim(self, scrim_id):
         cursor = self._connection.cursor()
+        cursor.execute(queries.Scrims.update_cancelled(), (True, scrim_id))
+
+        self._connection.commit()
+        cursor.close()
 
     def convert_contact_type_to_id(self, contact_type):
         cursor = self._connection.cursor()
@@ -108,7 +113,7 @@ class ScrimFinderDB:
 
         return match_id
 
-    def insert_message(self, message_id, message_type, reference_id):
+    def insert_message(self, message_id, channel_id, message_type, reference_id):
         type_id = self.select_message_type_from_name(message_type)
 
         if type_id is None:
@@ -116,16 +121,24 @@ class ScrimFinderDB:
             return None
 
         cursor = self._connection.cursor()
-        cursor.execute(queries.Messages.insert(), (message_id, type_id, reference_id))
+        cursor.execute(queries.Messages.insert(), (message_id, channel_id, type_id, reference_id))
 
         self._connection.commit()
         cursor.close()
 
         return message_id
 
-    def insert_proposal(self, scrim_id, team_id):
+    def insert_original_maps(self, proposal_id, map_ids):
         cursor = self._connection.cursor()
-        cursor.execute(queries.Proposals.insert(), (scrim_id, team_id))
+        for map_id in map_ids:
+            cursor.execute(queries.OriginalMaps.insert(), (proposal_id, map_id))
+
+        self._connection.commit()
+        cursor.close()
+
+    def insert_proposal(self, scrim_id, team_id, original_scrim_type_id):
+        cursor = self._connection.cursor()
+        cursor.execute(queries.Proposals.insert(), (scrim_id, team_id, original_scrim_type_id))
 
         if (proposal_id := cursor.fetchone()) is not None:
             proposal_id = proposal_id[0]
@@ -217,7 +230,7 @@ class ScrimFinderDB:
         return map_name
 
     def select_matches_by_scrim_id(self, scrim_id):
-        """ match_id, map_id, scrim_id """
+        """ list(match_id, map_id, scrim_id) """
 
         cursor = self._connection.cursor()
         cursor.execute(queries.Matches.select_by_scrim_id(), (scrim_id,))
@@ -308,8 +321,12 @@ class ScrimFinderDB:
         no_scrim_type_preference_id = self.select_no_scrim_type_preference_id()
 
         for scrim in simultanious_scrims:
-            scrim_id, _, scrim_type_id, _, against = scrim
+            scrim_id, _, scrim_type_id, _, cancelled, against = scrim
             print(f"Checking for scrim match against scrim with id {scrim_id}")
+
+            if cancelled:
+                print("This scrim has already been cancelled.")
+                continue
 
             if against is not None:
                 print("This scrim already has an opponent.")
@@ -323,7 +340,7 @@ class ScrimFinderDB:
                 print("This team already has a proposal on this scrim.")
                 continue
 
-            if any(rejected == False for (_, _, _, rejected) in self.select_proposals_from_scrim_id(scrim_id)):
+            if any(rejected == False for (_, _, _, rejected, _) in self.select_proposals_from_scrim_id(scrim_id)):
                 print("This scrim already has an active proposal.")
                 continue
 
@@ -350,6 +367,7 @@ class ScrimFinderDB:
         return message
     
     def select_message_by_reference_id(self, message_type_id, reference_id):
+        """" message_id, channel_id, message_type, reference_id """
         cursor = self._connection.cursor()
         cursor.execute(queries.Messages.select_all_by_reference_id(), (message_type_id, reference_id))
 
@@ -410,8 +428,44 @@ class ScrimFinderDB:
 
         return type_id
 
+    def select_original_maps(self, proposal_id):
+        """ list(map_id) """
+        cursor = self._connection.cursor()
+        cursor.execute(queries.OriginalMaps.select_by_proposal_id(), (proposal_id,))
+
+        maps = cursor.fetchall()
+
+        self._connection.commit()
+        cursor.close()
+
+        return maps
+
+    def select_overdue_scrims(self):
+        """ list(scrim_id) """
+        cursor = self._connection.cursor()
+        cursor.execute(queries.Scrims.select_overdue_scrims())
+
+        scrim_ids = cursor.fetchall()
+
+        self._connection.commit()
+        cursor.close()
+
+        return scrim_ids
+
+    def select_postable_scrims(self):
+        """ list(scrim_id) """
+        cursor = self._connection.cursor()
+        cursor.execute(queries.Scrims.select_postable_scrims())
+
+        scrim_ids = cursor.fetchall()
+
+        self._connection.commit()
+        cursor.close()
+
+        return scrim_ids
+
     def select_proposal(self, proposal_id):
-        """ proposal_id, scrim_id, team_id, rejected """
+        """ proposal_id, scrim_id, team_id, rejected, original_scrim_type """
 
         cursor = self._connection.cursor()
         cursor.execute(queries.Proposals.select(), (proposal_id,))
@@ -442,7 +496,7 @@ class ScrimFinderDB:
         proposals = cursor.fetchall()
         team_ids = []
         for proposal in proposals:
-            _, _, team_id, _ = proposal
+            _, _, team_id, _, _ = proposal
             team_ids.append(team_id)
 
         self._connection.commit()
@@ -451,7 +505,7 @@ class ScrimFinderDB:
         return team_ids
 
     def select_proposals_from_scrim_id(self, scrim_id):
-        """ proposal_id, scrim_id, team_id, rejected """
+        """ proposal_id, scrim_id, team_id, rejected, original_scrim_id """
         cursor = self._connection.cursor()
         cursor.execute(queries.Proposals.select_proposal_from_scrim_id(), (scrim_id,))
 
@@ -462,20 +516,8 @@ class ScrimFinderDB:
 
         return proposals
 
-    def select_proposals_from_team_id(self, team_id):
-        """ proposal_id, scrim_id, team_id, rejected """
-        cursor = self._connection.cursor()
-        cursor.execute(queries.Proposals.select_proposal_from_team_id(), (team_id,))
-
-        proposals = cursor.fetchall()
-
-        self._connection.commit()
-        cursor.close()
-
-        return proposals
-
     def select_scrim(self, scrim_id):
-        """ scrim_id, team_id, scrim_type_id, played_at, against """
+        """ scrim_id, team_id, scrim_type_id, played_at, cancelled, against """
 
         cursor = self._connection.cursor()
         cursor.execute(queries.Scrims.select(), (scrim_id,))
@@ -488,7 +530,7 @@ class ScrimFinderDB:
         return scrim
 
     def select_scrims_by_played_at(self, played_at):
-        """ scrim_id, team_id, scrim_type, played_at, against """ 
+        """ scrim_id, team_id, scrim_type, played_at, cancelled, against """ 
 
         cursor = self._connection.cursor()
         cursor.execute(queries.Scrims.select_by_played_at(), (played_at,))

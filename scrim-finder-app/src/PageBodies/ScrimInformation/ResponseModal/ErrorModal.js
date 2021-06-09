@@ -6,10 +6,16 @@ import CloseIcon from '@material-ui/icons/Close';
 function ErrorModal(props) {
     return (
         <React.Fragment>
-            {props.message}
+            <div className="ResponseModal-content-box">
+                {props.children}
+            </div>
             <Button
                 variant="outlined"
                 color="secondary"
+                style={{
+                    marginTop: "auto",
+                    marginBottom: "20px"
+                }}
                 onClick={props.closeModal}
                 endIcon={<CloseIcon/>}
             >

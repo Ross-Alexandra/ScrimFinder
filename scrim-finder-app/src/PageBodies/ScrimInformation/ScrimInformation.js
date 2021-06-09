@@ -1,5 +1,6 @@
 import React, {Component} from 'react';
 import Body from './Body';
+import Fade from '@material-ui/core/Fade';
 import Header from './Header';
 import MapSelector from './MapSelector';
 import { Button, CircularProgress, Modal} from '@material-ui/core';
@@ -15,7 +16,7 @@ class ScrimInformation extends Component {
     constructor(props) {
         super(props);
 
-        const now = new Date();
+        const now = new Date(new Date().toLocaleString("en-US", {timeZone: "America/New_York"}))
         const hours = now.getMinutes() >= 45 ? now.getHours() + 1 : now.getHours();
         const minutes = now.getMinutes() <= 15 || now.getMinutes() >= 45 ? 0 : 30;
         const played_at = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes);
@@ -118,7 +119,7 @@ class ScrimInformation extends Component {
         const errors = this.state.errors;
         errors["Played At"] = null;
 
-        const now = new Date();
+        const now = new Date(new Date().toLocaleString("en-US", {timeZone: "America/New_York"}))
         now.setHours(now.getHours() - 1);
         now.setMinutes(now.getMinutes() - 30);
         const minDate = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), now.getMinutes());
@@ -195,7 +196,7 @@ class ScrimInformation extends Component {
                     "maps": this.state.maps
                 })
             })
-            .then(response => response.response.json())
+            .then(response => response.json())
             .then(data => this.setModalContent(
                 <ResponseModal
                     response={data}
@@ -240,14 +241,17 @@ class ScrimInformation extends Component {
                 <Modal
                     className="Scrim-information-modal"
                     open={this.state.modalVisible}
+                    closeAfterTransition={true}
                     onClose={() => {}} // Only let modal content close the modal.
                 >
-                    <div className="Scrim-information-modal-border">
-                        <div className="Scrim-information-modal-box">
-                            {modalContent}
+                    <Fade in={this.state.modalVisible}>
+                        <div className="Scrim-information-modal-border">
+                            <div className="Scrim-information-modal-box">
+                                    {modalContent}
+                            </div>
                         </div>
-                    </div>
-                </Modal>     
+                    </Fade>
+                </Modal>
                 <Header/>
                 <Body
                     onTeamNameChanged={this.onTeamNameChanged}
