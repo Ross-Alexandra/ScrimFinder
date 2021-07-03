@@ -3,10 +3,11 @@ from multiprocessing.connection import Client
 from re import S
 from flask import request
 from flask_cors import cross_origin
+import traceback
 
 from scrim_finder.api import app
 from scrim_finder.api.codes import UserCodes, SystemCodes
-from scrim_finder.api.queue_objects import Scrim, INTER_PROCESS_AUTH_KEY
+from scrim_finder.api.queue_objects import Scrim, INTER_PROCESS_AUTH_KEY, INTER_PROCESS_PORT, INTER_PROCESS_HOST
 
 # ============= HELPERS FOR THE ROUTES ================== #
 
@@ -20,7 +21,7 @@ def message_bot(queue_object):
     rejected_counter = 0
     while True:
         try:
-            connection = Client(('localhost', 34365), authkey=INTER_PROCESS_AUTH_KEY)
+            connection = Client((INTER_PROCESS_HOST, INTER_PROCESS_PORT), authkey=INTER_PROCESS_AUTH_KEY)
         except (ConnectionResetError, ConnectionRefusedError):
             if rejected_counter > 20:
                 print("The service is down, and we cannot connect. Retried 20 times without success.")
@@ -31,7 +32,10 @@ def message_bot(queue_object):
 
         except Exception as e:
             print(f"Exception trying to communicate with the bot: {e}")
+            print(f"Attempting to communicate on {INTER_PROCESS_HOST}:{INTER_PROCESS_PORT} -- {INTER_PROCESS_AUTH_KEY}")
             print(f"Exception of type {e.__class__}")
+            traceback.print_tb(e.__traceback__)
+
             return SystemCodes.CommunicationError
         break
 

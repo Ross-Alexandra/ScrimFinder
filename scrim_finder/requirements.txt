@@ -2,4 +2,6 @@ discord
 flask
 flask-cors
 psycopg2
+pytz
 schedule
+requests

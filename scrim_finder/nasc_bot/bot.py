@@ -12,7 +12,7 @@ import traceback
 import scrim_finder.nasc_bot.bot_settings as bot_settings
 
 from scrim_finder.api.codes import SystemCodes, UserCodes
-from scrim_finder.api.queue_objects import INTER_PROCESS_AUTH_KEY, Scrim
+from scrim_finder.api.queue_objects import INTER_PROCESS_AUTH_KEY, INTER_PROCESS_PORT, INTER_PROCESS_HOST,Scrim
 from scrim_finder.db import ScrimFinderDB
 from scrim_finder.nasc_bot.command import CommandParser
 import scrim_finder.nasc_bot.aware_scheduler # Required for monkey patching schedule.
@@ -72,7 +72,7 @@ class NASCBot(discord.Client):
         # the other listener is still spinning down.
         sleep(.1)
 
-        listener = Listener(('localhost', 34365), authkey=INTER_PROCESS_AUTH_KEY)
+        listener = Listener((INTER_PROCESS_HOST, INTER_PROCESS_PORT), authkey=INTER_PROCESS_AUTH_KEY)
         listener_connection = listener.accept()
 
         print("New listener was created on NASC Bot.")
@@ -553,6 +553,10 @@ if __name__ == "__main__":
     intents = discord.Intents.default()
     intents.members = True
     intents.reactions = True
+
+    if bot_settings.bot_token == "":
+        print("Unable to start the bot. Token is missing.")
+        exit()
 
     client = NASCBot(intents=intents)
     client.spawn_listener()

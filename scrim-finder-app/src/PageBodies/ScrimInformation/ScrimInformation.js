@@ -124,8 +124,6 @@ class ScrimInformation extends Component {
         now.setMinutes(now.getMinutes() - 30);
         const minDate = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), now.getMinutes());
 
-        console.log(minDate);
-        console.log(this.state.played_at);
         if (this.state.played_at < minDate) {
             errors["Played At"] = "Please select a time closer to the present.";
         }
@@ -181,8 +179,10 @@ class ScrimInformation extends Component {
 
         this.displayModal();
 
+        const host_port = process.env.REACT_APP_BACKEND_HOST + ":" + process.env.REACT_APP_BACKEND_PORT
+
         try {
-            fetch("http://localhost:5000/scrim_request", {
+            fetch("http://" + host_port + "/scrim_request", {
                 method: "POST",
                 headers: {
                   'Accept': 'application/json',
@@ -203,12 +203,16 @@ class ScrimInformation extends Component {
                     closeModal={this.closeModal}
                 />
             ))
-            .catch(error => this.setModalContent(
-                <ResponseModal
-                    response={error}
-                    closeModal={this.closeModal}
-                />
-            ));
+            .catch(error => {
+                this.setModalContent(
+                    <ResponseModal
+                        response={error}
+                        closeModal={this.closeModal}
+                    />
+                );
+
+                console.log(error);
+            });
 
         } catch (err) {
             this.setModalContent(

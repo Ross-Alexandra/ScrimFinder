@@ -1,0 +1,67 @@
+version: "3.3"
+services:
+    scrimfinder_app:
+        container_name: scrimfinder_app
+        restart: unless-stopped
+        build:
+            context: .
+            dockerfile: React_Dockerfile
+            args:
+                REACT_APP_BACKEND_HOST: "172.28.1.3" #: API Host
+                REACT_APP_BACKEND_PORT: 34362 #: API Port
+        ports:
+        - "34363:80"
+        networks:
+            docks:
+                ipv4_address: 172.28.1.1
+    nasc_bot:
+        container_name: nasc_bot
+        restart: unless-stopped
+        build:
+            context: .
+            dockerfile: NASC_Bot_Dockerfile
+        ports:
+            - 34364:34364
+            - 34365:34365
+        networks:
+            docks:
+                ipv4_address: 172.28.1.2
+        environment:
+            NASCBOT_TOKEN: ${NASCBOT_TOKEN} #: Bot Token
+            SCRIM_FINDER_QUEUE_HOST: "172.28.1.2" #: Queue Host
+            SCRIM_FINDER_QUEUE_PORT: 34365 #: Queue Port
+            SCRIM_FINDER_QUEUE_AUTH: ${INTERPROCESSAUTHKEY} #: Queue Auth Token
+            SCRIM_FINDER_DB: ${SCRIMFINDERDB} #: Postgres db
+            POSTGRES_HOST: ${POSTGRESHOST} #: Postsgres Host
+            POSTGRES_PORT: ${POSTGRESPORT} #: Postgres Port
+            SCRIM_FINDER_USER: ${SCRIMFINDERUSER} #: Postgres User
+            SCRIM_FINDER_PASS: ${SCRIMFINDERPASS} #: Postgres Pass
+    scrimfinder_flask:
+        container_name: scrimfinder_flask
+        restart: unless-stopped
+        build:
+            context: .
+            dockerfile: Flask_Dockerfile
+        ports:
+            - 34362:34362
+        networks:
+            docks:
+                ipv4_address: 172.28.1.3
+        environment:
+            SCRIM_FINDER_APP_HOST: "172.28.1.1" #: React Host
+            SCRIM_FINDER_APP_PORT: 34363 #: React Port
+            SCRIM_FINDER_QUEUE_HOST: "172.28.1.2" #: Queue Host
+            SCRIM_FINDER_QUEUE_PORT: 34365 #: Queue Port
+            SCRIM_FINDER_QUEUE_AUTH: ${INTERPROCESSAUTHKEY} #: Queue Auth Token
+            SCRIM_FINDER_DB: ${SCRIMFINDERDB} #: Postgres db
+            POSTGRES_HOST: ${POSTGRESHOST} #: Postsgres Host
+            POSTGRES_PORT: ${POSTGRESPORT} #: Postgres Port
+            SCRIM_FINDER_USER: ${SCRIMFINDERUSER} #: Postgres User
+            SCRIM_FINDER_PASS: ${SCRIMFINDERPASS} #: Postgres Pass
+            SCRIM_FINDER_ENVIRONMENT: ${SCRIM_FINDER_ENVIRONMENT} #: The environment used to find the allowable CORS origins.
+networks:
+    docks:
+        ipam:
+            driver: default
+            config:
+                - subnet: 172.28.0.0/16

@@ -1,7 +1,7 @@
 import os
 
-db_host = os.getenv("POSTGRESHOST")
-db = os.getenv("SIEGESCHEDULERDATABASE")
-db_user = os.getenv("SIEGESCHEDULERUSER")
-db_pass = os.getenv("SIEGESCHEDULERPASS")
-db_port = os.getenv("POSTGRESPORT")
+db = os.getenv("SCRIM_FINDER_DB")
+db_host = os.getenv("POSTGRES_HOST")
+db_port = os.getenv("POSTGRES_PORT")
+db_user = os.getenv("SCRIM_FINDER_USER")
+db_pass = os.getenv("SCRIM_FINDER_PASS")

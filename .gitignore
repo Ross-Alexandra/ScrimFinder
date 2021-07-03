@@ -130,3 +130,6 @@ dmypy.json
 
 # VSCode Cache
 .vscode/
+
+# ENV setup
+.postgresenv
