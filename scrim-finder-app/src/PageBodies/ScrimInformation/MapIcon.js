@@ -42,7 +42,6 @@ class MapIcon extends Component {
                                         onClick={onClick}
                                         style={{background: 'url(/' + val.replace(" ", "_") + ".png)"}}
                                     >
-                                        <text>{val}</text>
                                     </div>
                                 );
                             });
