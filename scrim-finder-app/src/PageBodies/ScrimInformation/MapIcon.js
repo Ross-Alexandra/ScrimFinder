@@ -72,7 +72,7 @@ class MapIcon extends Component {
                         :
                             null
                         }  
-                        <text style={this.props.error ? {color: "#f44336"} : {}}>{this.props.map_name}</text>
+                        <text style={this.props.error ? {color: "#f44336"} : {}}></text>
                     </div>
                 </div>
             ) : (
