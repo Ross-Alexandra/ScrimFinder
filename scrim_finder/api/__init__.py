@@ -23,10 +23,18 @@ def _origins(verbose=False):
         "http://scrimsearch.com/",
         "https://scrimsearch.com",
         "https://scrimsearch.com/",
+        "http://www.scrimsearch.com",
+        "http://www.scrimsearch.com/",
+        "https://www.scrimsearch.com",
+        "https://www.scrimsearch.com/",
         "http://154.5.209.170/",
         "http://154.5.209.170",
         "https://154.5.209.170/",
         "https://154.5.209.170",
+        "http://192.168.1.70:34363/",
+        "http://192.168.1.70:34363",
+        "https://192.168.1.70:34363/",
+        "https://192.168.1.70:34363",
     ]
 
     if os.getenv("SCRIM_FINDER_ENVIRONMENT", None) == "DEVELOPMENT":
