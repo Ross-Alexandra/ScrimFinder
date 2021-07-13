@@ -8,4 +8,7 @@ RUN pip install -r requirements.txt
 
 COPY scrim_finder/ /code/scrim_finder
 
+ARG NASCBOT_TOKEN
+ENV NASCBOT_TOKEN ${NASCBOT_TOKEN}
+
 CMD ["python3", "-u", "-m", "scrim_finder.nasc_bot.bot"]
