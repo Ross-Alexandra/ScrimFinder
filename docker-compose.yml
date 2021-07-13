@@ -8,13 +8,13 @@ services:
             context: .
             dockerfile: React_Dockerfile
             args:
-                REACT_APP_BACKEND_HOST: "172.28.0.3" #: API Host
+                REACT_APP_BACKEND_HOST: "172.28.0.4" #: API Host
                 REACT_APP_BACKEND_PORT: 34362 #: API Port
         ports:
         - "34363:80"
         networks:
             docks:
-                ipv4_address: 172.28.0.1
+                ipv4_address: 172.28.0.2
     nasc_bot:
         image: nasc_bot
         container_name: nasc_bot
@@ -27,9 +27,9 @@ services:
             - 34365:34365
         networks:
             docks:
-                ipv4_address: 172.28.0.2
+                ipv4_address: 172.28.0.3
         environment:
-            SCRIM_FINDER_QUEUE_HOST: "172.28.0.2" #: Queue Host
+            SCRIM_FINDER_QUEUE_HOST: "172.28.0.3" #: Queue Host
             SCRIM_FINDER_QUEUE_PORT: 34365 #: Queue Port
             NASCBOT_TOKEN: ${NASCBOT_TOKEN}
             SCRIM_FINDER_QUEUE_AUTH: ${INTERPROCESSAUTHKEY} #: Queue Auth Token
@@ -49,11 +49,11 @@ services:
             - 34362:34362
         networks:
             docks:
-                ipv4_address: 172.28.0.3
+                ipv4_address: 172.28.0.4
         environment:
-            SCRIM_FINDER_APP_HOST: "172.28.0.1" #: React Host
+            SCRIM_FINDER_APP_HOST: "172.28.0.2" #: React Host
             SCRIM_FINDER_APP_PORT: 34363 #: React Port
-            SCRIM_FINDER_QUEUE_HOST: "172.28.0.2" #: Queue Host
+            SCRIM_FINDER_QUEUE_HOST: "172.28.0.3" #: Queue Host
             SCRIM_FINDER_QUEUE_PORT: 34365 #: Queue Port
             SCRIM_FINDER_QUEUE_AUTH: ${INTERPROCESSAUTHKEY} #: Queue Auth Token
             SCRIM_FINDER_DB: ${SCRIMFINDERDB} #: Postgres db
