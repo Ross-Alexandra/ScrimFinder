@@ -2,6 +2,7 @@ version: "3.3"
 services:
     scrimfinder_app:
         container_name: scrimfinder_app
+        image: scrimfinder_app
         restart: unless-stopped
         build:
             context: .
@@ -15,6 +16,7 @@ services:
             docks:
                 ipv4_address: 172.28.1.1
     nasc_bot:
+        image: nasc_bot
         container_name: nasc_bot
         restart: unless-stopped
         build:
@@ -27,9 +29,9 @@ services:
             docks:
                 ipv4_address: 172.28.1.2
         environment:
-            NASCBOT_TOKEN: ${NASCBOT_TOKEN} #: Bot Token
             SCRIM_FINDER_QUEUE_HOST: "172.28.1.2" #: Queue Host
             SCRIM_FINDER_QUEUE_PORT: 34365 #: Queue Port
+            NASCBOT_TOKEN: ${NASCBOT_TOKEN}
             SCRIM_FINDER_QUEUE_AUTH: ${INTERPROCESSAUTHKEY} #: Queue Auth Token
             SCRIM_FINDER_DB: ${SCRIMFINDERDB} #: Postgres db
             POSTGRES_HOST: ${POSTGRESHOST} #: Postsgres Host
@@ -37,6 +39,7 @@ services:
             SCRIM_FINDER_USER: ${SCRIMFINDERUSER} #: Postgres User
             SCRIM_FINDER_PASS: ${SCRIMFINDERPASS} #: Postgres Pass
     scrimfinder_flask:
+        image: scrimfinder_flask
         container_name: scrimfinder_flask
         restart: unless-stopped
         build:
