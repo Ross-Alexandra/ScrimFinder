@@ -43,6 +43,10 @@ def _origins(verbose=False):
         "http://192.168.1.70:34363",
         "https://192.168.1.70:34363/",
         "https://192.168.1.70:34363",
+        f"http://{os.getenv('SCRIM_FINDER_APP_HOST', 'scrimsearch.com')}",
+        f"http://{os.getenv('SCRIM_FINDER_APP_HOST', 'scrimsearch.com')}/",
+        f"https://{os.getenv('SCRIM_FINDER_APP_HOST', 'scrimsearch.com')}",
+        f"https://{os.getenv('SCRIM_FINDER_APP_HOST', 'scrimsearch.com')}/",
     ]
 
     if os.getenv("SCRIM_FINDER_ENVIRONMENT", None) == "DEVELOPMENT":
