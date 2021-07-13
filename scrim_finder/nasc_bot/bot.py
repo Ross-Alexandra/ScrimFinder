@@ -528,7 +528,7 @@ class NASCBot(discord.Client):
         for guild in self.guilds:
             for channel in guild.channels:
                 if channel.name == "scrims":
-                    embed = discord.Embed(title=f"Team '{team_name}' is LFS", description="to schedule with them please post a scrim at the matching time at http://ScrimSearch.com", color=0x000055)
+                    embed = discord.Embed(title=f"Team '{team_name}' is LFS", description="to schedule with them please post a scrim at the matching time at http://scrimsearch.theserverproject.com", color=0x000055)
                     embed.add_field(name="Time", value=date_string, inline=False)
                     embed.add_field(name="Type", value=scrim_type, inline=False)
                     for index, map_name in enumerate(maps):
