@@ -60,6 +60,6 @@ def _origins(verbose=False):
     return origins
 
 app = Flask(__name__)
-CORS(app, origins=_origins(verbose=False))
+CORS(app) #,  origins=_origins(verbose=False))
 
 from scrim_finder.api import routes
