@@ -47,7 +47,7 @@ services:
             dockerfile: Flask_Dockerfile
             args:
                 SCRIM_FINDER_FLASK_HOST: "172.28.0.4"
-                SCRIM_FINDER_FLASK_POST: 34362
+                SCRIM_FINDER_FLASK_PORT: 34362
         ports:
             - 34362:34362
         networks:

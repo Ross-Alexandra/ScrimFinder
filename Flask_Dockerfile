@@ -9,10 +9,12 @@ WORKDIR /flask-deploy
 RUN pip install -r scrim_finder/requirements.txt
 RUN pip install gunicorn
 
-ENV PYTHONUNBUFFERED=TRUE
 ARG SCRIM_FINDER_FLASK_HOST
 ARG SCRIM_FINDER_FLASK_PORT
 
-EXPORT ${SCRIM_FINDER_FLASK_PORT}
+EXPOSE ${SCRIM_FINDER_FLASK_PORT}
 
-CMD gunicorn -R --workers 1 --bind ${SCRIM_FINDER_FLASK_HOST}:${SCRIM_FINDER_FLASK_PORT} scrim_finder.api:app --max-requests 10000 --timeout 5 --keep-alive 5 --log-level info
+ENV SCRIM_FINDER_FLASK_HOST ${SCRIM_FINDER_FLASK_HOST}
+ENV SCRIM_FINDER_FLASK_PORT ${SCRIM_FINDER_FLASK_PORT}
+ENV PYTHONUNBUFFERED=TRUE
+CMD gunicorn -R --workers 1 --bind ${SCRIM_FINDER_FLASK_HOST}:${SCRIM_FINDER_FLASK_PORT} scrim_finder.api:app --max-requests 10000 --timeout 5 --keep-alive 5 --log-level debug
