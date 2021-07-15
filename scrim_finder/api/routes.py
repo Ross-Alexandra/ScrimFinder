@@ -58,7 +58,7 @@ def scrim_request():
     required_parameters = ["team_name", "scrim_type", "team_contact", "played_at", "maps"]
 
     if data is None or not all([x in data.keys() for x in required_parameters]):
-        return {"msg": "Missing Parameters on request", "code": UserCodes.MissingParameters}, 400
+        return {"msg": "Missing Parameters on request", "code": UserCodes.MissingParameters.value}, 400
 
     # Convert the data to usable formats.
     team_name = data["team_name"].lower()
