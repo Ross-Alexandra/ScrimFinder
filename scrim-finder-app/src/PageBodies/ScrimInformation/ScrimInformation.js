@@ -179,22 +179,24 @@ class ScrimInformation extends Component {
 
         this.displayModal();
 
-        const host_port = process.env.REACT_APP_BACKEND_HOST + ":" + process.env.REACT_APP_BACKEND_PORT
+        const request_body = {
+            "team_name": this.state.team_name,
+            "scrim_type": this.state.scrim_type,
+            "played_at": this.state.played_at,
+            "team_contact": this.state.team_contact,
+            "maps": this.state.maps
+        }
+
+        console.log(request_body);
 
         try {
-            fetch("http://" + host_port + "/scrim_request", {
+            fetch("/scrim_request", {
                 method: "POST",
                 headers: {
                   'Accept': 'application/json',
                   'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({
-                    "team_name": this.state.team_name,
-                    "scrim_type": this.state.scrim_type,
-                    "played_at": this.state.played_at,
-                    "team_contact": this.state.team_contact,
-                    "maps": this.state.maps
-                })
+                body: JSON.stringify(request_body)
             })
             .then(response => response.json())
             .then(data => this.setModalContent(

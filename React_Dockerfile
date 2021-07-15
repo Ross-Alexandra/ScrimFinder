@@ -19,9 +19,19 @@ ENV REACT_APP_BACKEND_PORT ${REACT_APP_BACKEND_PORT}
 
 RUN npm run build
 
+COPY scrim-finder-app/app.conf /app/default.conf.template
+
 FROM nginx:stable-alpine
 
+ARG REACT_APP_BACKEND_HOST
+ARG REACT_APP_BACKEND_PORT
+ENV REACT_APP_BACKEND_HOST ${REACT_APP_BACKEND_HOST}
+ENV REACT_APP_BACKEND_PORT ${REACT_APP_BACKEND_PORT}
+
 COPY --from=build /app/build /usr/share/nginx/html
+COPY --from=build /app/default.conf.template /etc/nginx/conf.d/default.conf.template
+RUN envsubst < "/etc/nginx/conf.d/default.conf.template" > "/etc/nginx/conf.d/default.conf"
+
 EXPOSE 80
 
 CMD ["nginx", "-g", "daemon off;"]
