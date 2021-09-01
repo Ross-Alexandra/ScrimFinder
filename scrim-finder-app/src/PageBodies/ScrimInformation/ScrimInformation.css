@@ -147,6 +147,12 @@
     text-transform: capitalize;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+    animation: fadein 200ms;
+}
+
+@keyframes fadein {
+    from {opacity: 0;}
+    to {opacity: 1;}
 }
 
 .Scrim-information-map-selector-picker-remove {
